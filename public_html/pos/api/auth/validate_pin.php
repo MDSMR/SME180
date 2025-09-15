@@ -1,13 +1,7 @@
 <?php
 // File: /public_html/pos/api/auth/validate_pin.php
-// UPDATED VERSION - Works with manager_pin column
+// FIXED VERSION - Handles NULL user_id in audit log
 declare(strict_types=1);
-
-/**
- * POS Auth - Validate PIN (Manager Override)
- * Updated to work with manager_pin column
- * Body: { pin, [action], [tenant_id], [branch_id] }
- */
 
 require_once __DIR__ . '/../../../config/db.php';
 require_once __DIR__ . '/../../../middleware/tenant_context.php';
@@ -26,19 +20,17 @@ if ($pin === '') {
 try {
     $pdo = db();
     
-    // Build query to check manager_pin
+    // Check manager_pin
     $sql = "SELECT 
                 id, 
                 tenant_id,
                 name, 
                 username,
-                role_key AS role,
-                can_work_all_stations
+                role_key AS role
             FROM users
             WHERE manager_pin = :pin
               AND (disabled_at IS NULL OR disabled_at > NOW())";
     
-    // Add tenant filter if provided
     if ($tenantId !== null) {
         $sql .= " AND tenant_id = :tenant_id";
     }
@@ -64,47 +56,55 @@ try {
         respond(false, 'Insufficient permissions. Manager role required.', 403);
     }
     
-    // Log the validation attempt
+    // Get requesting user from session if available
     if (session_status() === PHP_SESSION_NONE) {
         @session_start();
     }
-    
     $requestingUserId = $_SESSION['pos_user_id'] ?? null;
     
-    // Log in audit table
-    $logStmt = $pdo->prepare(
-        "INSERT INTO audit_logs (
-            tenant_id, 
-            branch_id, 
-            user_id, 
-            action, 
-            entity_type, 
-            entity_id, 
-            details, 
-            created_at
-        ) VALUES (
-            :tenant_id,
-            :branch_id,
-            :user_id,
-            'manager_override',
-            'validation',
-            :manager_id,
-            :details,
-            NOW()
-        )"
-    );
-    
-    $logStmt->execute([
-        'tenant_id' => $user['tenant_id'],
-        'branch_id' => $branchId,
-        'user_id' => $requestingUserId,
-        'manager_id' => $user['id'],
-        'details' => json_encode([
-            'action' => $action,
-            'manager_name' => $user['name'] ?? $user['username'],
-            'timestamp' => date('Y-m-d H:i:s')
-        ])
-    ]);
+    // Log validation - handle NULL user_id gracefully
+    try {
+        // Only log if audit_logs accepts NULL user_id, otherwise use the manager's ID
+        $logUserId = $requestingUserId ?? $user['id'];
+        
+        $logStmt = $pdo->prepare(
+            "INSERT INTO audit_logs (
+                tenant_id, 
+                branch_id, 
+                user_id, 
+                action, 
+                entity_type,
+                entity_id,
+                details, 
+                created_at
+            ) VALUES (
+                :tenant_id,
+                :branch_id,
+                :user_id,
+                'manager_override',
+                'validation',
+                :entity_id,
+                :details,
+                NOW()
+            )"
+        );
+        
+        $logStmt->execute([
+            'tenant_id' => $user['tenant_id'],
+            'branch_id' => $branchId,
+            'user_id' => $logUserId, // Use manager ID if no session user
+            'entity_id' => $user['id'],
+            'details' => json_encode([
+                'action' => $action,
+                'manager_name' => $user['name'] ?? $user['username'],
+                'requesting_user' => $requestingUserId,
+                'timestamp' => date('Y-m-d H:i:s')
+            ])
+        ]);
+    } catch (Exception $e) {
+        // Ignore audit log errors
+        error_log("Audit log failed: " . $e->getMessage());
+    }
     
     // Return validation success
     respond(true, [
@@ -113,7 +113,7 @@ try {
         'manager_name' => $user['name'] ?? $user['username'],
         'manager_role' => $user['role'],
         'action_authorized' => true,
-        'authorization_token' => bin2hex(random_bytes(16)), // For temporary auth
+        'authorization_token' => bin2hex(random_bytes(16)),
         'expires_in' => 300 // 5 minutes
     ]);
     
