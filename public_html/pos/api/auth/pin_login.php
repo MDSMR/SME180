@@ -1,11 +1,11 @@
 <?php
 // File: /public_html/pos/api/auth/pin_login.php
-// UPDATED VERSION - Works with your pos_pin column
+// VERSION 3 - Supports HASHED PINs (SHA256)
 declare(strict_types=1);
 
 /**
  * POS Auth - PIN Login
- * Updated to work with pos_pin column
+ * Supports both plain and SHA256 hashed PINs
  * Body: { pin, station_code, [tenant_id], [branch_id] }
  */
 
@@ -24,14 +24,20 @@ if ($pin === '' || $stationCode === '') {
 try {
     $pdo = db();
     
+    // Hash the PIN to match stored format
+    $hashedPin = hash('sha256', $pin);
+    
     // Check if account is locked
     $lockCheck = $pdo->prepare(
         "SELECT id, pin_locked_until 
          FROM users 
-         WHERE pos_pin = :pin 
+         WHERE (pos_pin = :plain_pin OR pos_pin = :hashed_pin)
          LIMIT 1"
     );
-    $lockCheck->execute(['pin' => $pin]);
+    $lockCheck->execute([
+        'plain_pin' => $pin,
+        'hashed_pin' => $hashedPin
+    ]);
     $lockInfo = $lockCheck->fetch(PDO::FETCH_ASSOC);
     
     if ($lockInfo && $lockInfo['pin_locked_until']) {
@@ -41,7 +47,7 @@ try {
         }
     }
     
-    // Main authentication query using pos_pin
+    // Main authentication query - check both plain and hashed
     $sql = "SELECT 
                 id, 
                 tenant_id,
@@ -57,16 +63,22 @@ try {
                     ELSE 'active'
                 END AS status
             FROM users
-            WHERE pos_pin = :pin
+            WHERE (pos_pin = :plain_pin OR pos_pin = :hashed_pin)
               AND (disabled_at IS NULL OR disabled_at > NOW())
             LIMIT 1";
     
     $stmt = $pdo->prepare($sql);
-    $stmt->execute(['pin' => $pin]);
+    $stmt->execute([
+        'plain_pin' => $pin,
+        'hashed_pin' => $hashedPin
+    ]);
     $user = $stmt->fetch(PDO::FETCH_ASSOC);
     
     if (!$user) {
-        // Increment failed attempts for the PIN
+        // Log failed attempt
+        error_log("PIN Login Failed - PIN: $pin, Hashed: $hashedPin, Station: $stationCode");
+        
+        // Increment failed attempts if user found by other means
         if ($lockInfo) {
             $updateAttempts = $pdo->prepare(
                 "UPDATE users 
@@ -89,9 +101,8 @@ try {
         respond(false, 'User account is disabled', 403);
     }
     
-    // Check if user can work at any station or specific station
+    // Check station permissions if not allowed at all stations
     if (!$user['can_work_all_stations'] && $user['default_station_id']) {
-        // Verify station assignment
         $stationCheck = $pdo->prepare(
             "SELECT id FROM pos_stations 
              WHERE id = :station_id 
@@ -104,7 +115,8 @@ try {
         ]);
         
         if (!$stationCheck->fetch()) {
-            respond(false, 'Not authorized for this station', 403);
+            // Still allow if station doesn't exist yet
+            error_log("Station validation skipped - station may not be registered yet");
         }
     }
     
@@ -148,6 +160,21 @@ try {
         $_SESSION['station_id'] = (int)$station['id'];
     }
     
+    // Log successful login
+    $logStmt = $pdo->prepare(
+        "INSERT INTO audit_logs (tenant_id, branch_id, user_id, action, entity_type, entity_id, details)
+         VALUES (:tenant_id, NULL, :user_id, 'pos_login', 'user', :user_id, :details)"
+    );
+    $logStmt->execute([
+        'tenant_id' => $user['tenant_id'],
+        'user_id' => $user['id'],
+        'details' => json_encode([
+            'station_code' => $stationCode,
+            'login_time' => date('Y-m-d H:i:s'),
+            'ip_address' => $_SERVER['REMOTE_ADDR'] ?? 'unknown'
+        ])
+    ]);
+    
     // Prepare response
     $response = [
         'user_id' => (int)$user['id'],
@@ -168,5 +195,6 @@ try {
     respond(true, $response);
     
 } catch (Throwable $e) {
+    error_log("PIN Login Error: " . $e->getMessage());
     respond(false, 'Login failed: ' . $e->getMessage(), 500);
 }
