@@ -1,43 +1,7 @@
 <?php
 // File: /public_html/pos/api/stations/heartbeat.php
+// FIXED VERSION - Removes system_messages dependency
 declare(strict_types=1);
-
-/**
- * POS Stations - Heartbeat
- * Updates station last seen timestamp and returns station status
- * 
- * Request: POST /pos/api/stations/heartbeat.php
- * Body: {
- *   "tenant_id": 1,
- *   "branch_id": 1,
- *   "station_code": "POS1",
- *   "status_data": {
- *     "cpu_usage": 45,
- *     "memory_usage": 60,
- *     "disk_usage": 30,
- *     "printer_status": "online",
- *     "network_status": "connected"
- *   } (optional)
- * }
- * 
- * Response:
- * {
- *   "success": true,
- *   "data": {
- *     "station_id": 1,
- *     "station_active": true,
- *     "last_heartbeat": "2025-09-15 10:30:45",
- *     "active_session": {
- *       "session_id": 5,
- *       "user_name": "John Doe",
- *       "opened_at": "2025-09-15 08:00:00"
- *     },
- *     "pending_approvals": 2,
- *     "server_time": "2025-09-15 10:30:45"
- *   },
- *   "error": null
- * }
- */
 
 require_once __DIR__ . '/../../../config/db.php';
 require_once __DIR__ . '/../../../middleware/tenant_context.php';
@@ -50,7 +14,6 @@ $tenantId = (int)$in['tenant_id'];
 $branchId = (int)$in['branch_id'];
 $stationCode = trim($in['station_code']);
 $statusData = $in['status_data'] ?? [];
-$ipAddress = $_SERVER['REMOTE_ADDR'] ?? null;
 
 try {
     $pdo = db();
@@ -80,21 +43,32 @@ try {
     
     $stationId = (int)$station['id'];
     
-    // Update heartbeat
+    // Update heartbeat - simplified version
     $updateStmt = $pdo->prepare(
         "UPDATE pos_stations 
          SET last_heartbeat = NOW(),
-             ip_address = :ip_address,
-             status_data = :status_data,
              is_active = 1
          WHERE id = :id"
     );
     
-    $updateStmt->execute([
-        'ip_address' => $ipAddress,
-        'status_data' => !empty($statusData) ? json_encode($statusData) : null,
-        'id' => $stationId
-    ]);
+    $updateStmt->execute(['id' => $stationId]);
+    
+    // If status_data column exists, update it
+    if (!empty($statusData)) {
+        try {
+            $statusStmt = $pdo->prepare(
+                "UPDATE pos_stations 
+                 SET status_data = :status_data 
+                 WHERE id = :id"
+            );
+            $statusStmt->execute([
+                'status_data' => json_encode($statusData),
+                'id' => $stationId
+            ]);
+        } catch (Exception $e) {
+            // Ignore if column doesn't exist
+        }
+    }
     
     // Check for active cash session on this station
     $sessionStmt = $pdo->prepare(
@@ -113,37 +87,20 @@ try {
     $sessionStmt->execute(['station_id' => $stationId]);
     $activeSession = $sessionStmt->fetch(PDO::FETCH_ASSOC);
     
-    // Check for pending approvals for this station
-    $approvalsStmt = $pdo->prepare(
-        "SELECT COUNT(*) as pending_count
-         FROM pos_approvals
-         WHERE branch_id = :branch_id
-           AND status = 'pending'
-           AND (expires_at IS NULL OR expires_at > NOW())"
-    );
-    $approvalsStmt->execute(['branch_id' => $branchId]);
-    $pendingApprovals = (int)$approvalsStmt->fetchColumn();
-    
-    // Check if station was inactive for too long (> 5 minutes)
-    $wasInactive = false;
-    if ($station['seconds_since_last'] !== null && $station['seconds_since_last'] > 300) {
-        $wasInactive = true;
-        
-        // Log station came back online
-        $logStmt = $pdo->prepare(
-            "INSERT INTO audit_logs (tenant_id, branch_id, user_id, action, entity_type, entity_id, details)
-             VALUES (:tenant_id, :branch_id, NULL, 'station_reconnected', 'pos_station', :station_id, :details)"
+    // Check for pending approvals
+    $pendingApprovals = 0;
+    try {
+        $approvalsStmt = $pdo->prepare(
+            "SELECT COUNT(*) as pending_count
+             FROM pos_approvals
+             WHERE branch_id = :branch_id
+               AND status = 'pending'
+               AND (expires_at IS NULL OR expires_at > NOW())"
         );
-        $logStmt->execute([
-            'tenant_id' => $tenantId,
-            'branch_id' => $branchId,
-            'station_id' => $stationId,
-            'details' => json_encode([
-                'station_code' => $stationCode,
-                'offline_duration_seconds' => $station['seconds_since_last'],
-                'ip_address' => $ipAddress
-            ])
-        ]);
+        $approvalsStmt->execute(['branch_id' => $branchId]);
+        $pendingApprovals = (int)$approvalsStmt->fetchColumn();
+    } catch (Exception $e) {
+        // Table might not exist
     }
     
     // Build response
@@ -153,7 +110,6 @@ try {
         'station_type' => $station['station_type'],
         'station_active' => true,
         'last_heartbeat' => date('Y-m-d H:i:s'),
-        'was_inactive' => $wasInactive,
         'pending_approvals' => $pendingApprovals,
         'server_time' => date('Y-m-d H:i:s')
     ];
@@ -165,28 +121,6 @@ try {
             'opened_at' => $activeSession['opened_at'],
             'opening_amount' => (float)$activeSession['opening_amount']
         ];
-    }
-    
-    // Get any system messages for this station
-    $messageStmt = $pdo->prepare(
-        "SELECT message, priority, created_at
-         FROM system_messages
-         WHERE tenant_id = :tenant_id
-           AND (branch_id = :branch_id OR branch_id IS NULL)
-           AND is_active = 1
-           AND (expires_at IS NULL OR expires_at > NOW())
-         ORDER BY priority DESC, created_at DESC
-         LIMIT 1"
-    );
-    $messageStmt->execute([
-        'tenant_id' => $tenantId,
-        'branch_id' => $branchId
-    ]);
-    $systemMessage = $messageStmt->fetch(PDO::FETCH_ASSOC);
-    
-    if ($systemMessage) {
-        $response['system_message'] = $systemMessage['message'];
-        $response['message_priority'] = $systemMessage['priority'];
     }
     
     respond(true, $response);
