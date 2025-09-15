@@ -1,0 +1,117 @@
+/* Microsoft 365 Fluent Design — Stamp Rewards (nav + layout) */
+:root{
+  --ms-white:#fff;
+  --ms-gray-10:#faf9f8;--ms-gray-20:#f3f2f1;--ms-gray-30:#edebe9;--ms-gray-40:#e1dfdd;
+  --ms-gray-50:#d2d0ce;--ms-gray-60:#c8c6c4;--ms-gray-90:#a19f9d;--ms-gray-110:#8a8886;
+  --ms-gray-130:#605e5c;--ms-gray-160:#323130;
+  --ms-blue:#0078d4;--ms-blue-hover:#106ebe;--ms-blue-pressed:#005a9e;--ms-blue-lighter:#f3f9fd;
+  --ms-green:#107c10;--ms-red:#d13438;--ms-yellow:#ffb900;--ms-purple:#5c2d91;
+  --ms-green-light:#e5f1e5;--ms-red-light:#fde7e9;--ms-yellow-light:#fff4ce;
+  --ms-shadow-1:0 1.6px 3.6px rgba(0,0,0,.132),0 .3px .9px rgba(0,0,0,.108);
+  --ms-shadow-2:0 3.2px 7.2px rgba(0,0,0,.132),0 .6px 1.8px rgba(0,0,0,.108);
+  --ms-radius:8px;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--ms-gray-10);font-family:'Segoe UI',-apple-system,BlinkMacSystemFont,Roboto,Helvetica Neue,sans-serif;font-size:14px;line-height:20px;color:var(--ms-gray-160);-webkit-font-smoothing:antialiased}
+.container{max-width:1400px;margin:0 auto;padding:24px}
+.h1{font-size:28px;font-weight:600;margin:0 0 4px;color:var(--ms-gray-160)}
+.sub{color:var(--ms-gray-130);font-size:14px;margin:0 0 24px}
+
+/* Nav bar */
+.ms-nav-bar{display:flex;align-items:center;background:var(--ms-white);border-radius:var(--ms-radius);box-shadow:var(--ms-shadow-1);padding:8px 16px;margin:16px 0 24px;border:1px solid var(--ms-gray-30);min-height:48px;gap:4px;flex-wrap:wrap}
+.ms-nav-tab{display:inline-flex;align-items:center;gap:8px;padding:12px 20px;background:none;border:none;color:#605e5c;font-weight:600;font-size:14px;border-radius:6px;cursor:pointer;transition:.1s;text-decoration:none;position:relative;white-space:nowrap;min-height:36px}
+.ms-nav-tab:hover{background:#f3f2f1;color:#323130;text-decoration:none}
+.ms-nav-tab.active{color:#0078d4;background:var(--ms-blue-lighter)}
+.ms-nav-tab.active::after{content:'';position:absolute;bottom:4px;left:50%;transform:translateX(-50%);width:24px;height:2px;background:#0078d4;border-radius:1px}
+.ms-nav-tab:focus-visible{outline:2px solid var(--ms-blue);outline-offset:2px}
+.ms-icon{font-size:14px;line-height:1}
+
+/* Cards / table / buttons / badges / notices / pager — trimmed for brevity but complete */
+.card{background:#fff;border-radius:var(--ms-radius);box-shadow:var(--ms-shadow-2);padding:32px;margin-bottom:24px;border:1px solid #edebe9}
+.card-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;padding-bottom:16px;border-bottom:1px solid #edebe9}
+.card-title{font-size:18px;font-weight:600;margin:0;color:#323130}
+.table{width:100%;border-collapse:collapse;background:#fff;border:1px solid #edebe9;border-radius:6px;overflow:hidden;box-shadow:var(--ms-shadow-1)}
+.table th{background:#f3f2f1;padding:12px 16px;text-align:left;font-size:12px;font-weight:600;color:#605e5c;border-bottom:1px solid #edebe9;text-transform:uppercase;letter-spacing:.5px}
+.table td{padding:16px;border-bottom:1px solid #f3f2f1;font-size:14px;color:#323130;vertical-align:middle}
+.table tbody tr:hover{background:#faf9f8}
+.table tbody tr:last-child td{border-bottom:none}
+.btn{padding:8px 16px;min-width:80px;border:1px solid #e1dfdd;background:#fff;border-radius:6px;cursor:pointer;font-size:14px;font-weight:500;color:#323130;text-decoration:none;display:inline-flex;align-items:center;justify-content:center;transition:.2s}
+.btn:hover{background:#f3f2f1;border-color:#d2d0ce;text-decoration:none;transform:translateY(-1px);box-shadow:var(--ms-shadow-1)}
+.btn.primary{background:#0078d4;color:#fff;border-color:#0078d4;font-weight:600}
+.btn.primary:hover{background:#106ebe;border-color:#106ebe}
+.btn.small{padding:6px 12px;font-size:12px;min-width:60px}
+.btn.danger{color:#d13438}
+.btn.danger:hover{background:#fde7e9;border-color:#d13438}
+.badge{display:inline-block;padding:4px 10px;background:#f3f2f1;border-radius:12px;font-size:11px;font-weight:600;color:#605e5c;text-transform:uppercase;letter-spacing:.5px}
+.badge.good{background:#107c10;color:#fff}
+.badge.warn{background:#ffb900;color:#323130}
+.badge.bad{background:#d13438;color:#fff}
+.notice{padding:12px 16px;margin:16px 0;background:#fff4ce;border-left:4px solid #ffb900;border-radius:6px;color:#323130;font-size:14px}
+.notice.alert-ok{background:#e5f1e5;border-left-color:#107c10}
+.notice.alert-error{background:#fde7e9;border-left-color:#d13438}
+.pager{display:flex;gap:12px;align-items:center;justify-content:center;padding:16px 0}
+
+/* Responsive */
+@media (max-width:1024px){ .ms-nav-bar{padding:12px;gap:8px} }
+@media (max-width:768px){
+  .container{padding:16px}
+  .card{padding:20px}
+  .table{font-size:12px}
+  .table th,.table td{padding:8px 12px}
+  .ms-nav-tab{flex:1;text-align:center;font-size:12px;padding:10px 12px}
+}
+/* Branch-specific tag styling */
+.tag-all {
+  background: linear-gradient(135deg, var(--ms-purple-light) 0%, var(--ms-blue-light) 100%);
+  border: 1px solid var(--ms-purple);
+  color: var(--ms-purple);
+  font-weight: 600;
+}
+
+.tag-all button {
+  color: var(--ms-purple);
+  font-weight: 700;
+}
+
+/* Branch tagbox styling */
+.tagbox[data-type="branches"] .tag {
+  background: var(--ms-green-light);
+  border: 1px solid var(--ms-green);
+  color: var(--ms-green);
+}
+
+.tagbox[data-type="branches"] .tag button {
+  color: var(--ms-green);
+}
+
+.tagbox[data-type="branches"] .js-add-all {
+  background: var(--ms-purple);
+  color: white;
+  border-color: var(--ms-purple);
+}
+
+.tagbox[data-type="branches"] .js-add-all:hover {
+  background: var(--ms-purple);
+  opacity: 0.9;
+}
+
+/* Enhanced Scrollbar */
+::-webkit-scrollbar {
+  width: 12px;
+  height: 12px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--ms-gray-20);
+  border-radius: var(--ms-radius);
+}
+
+::-webkit-scrollbar-thumb {
+  background: linear-gradient(135deg, var(--ms-gray-90) 0%, var(--ms-gray-110) 100%);
+  border-radius: var(--ms-radius);
+  border: 2px solid var(--ms-gray-20);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(135deg, var(--ms-gray-110) 0%, var(--ms-gray-130) 100%);
+}

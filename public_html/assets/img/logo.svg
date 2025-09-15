@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="200" height="200" viewBox="0 0 200 200"
+     xmlns="http://www.w3.org/2000/svg" role="img" aria-label="SME 180 animated icon">
+  <defs>
+    <!-- Gradients -->
+    <linearGradient id="gradPrimary" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#667eea"/>
+      <stop offset="100%" stop-color="#764ba2"/>
+    </linearGradient>
+    <radialGradient id="gradOrb" cx="30%" cy="30%" r="70%">
+      <stop offset="0%" stop-color="#667eea"/>
+      <stop offset="100%" stop-color="#764ba2"/>
+    </radialGradient>
+
+    <!-- Simple CSS animation inside SVG -->
+    <style><![CDATA[
+      .rot-ccw { animation: rot-ccw 6s linear infinite; transform-origin: 100px 100px; }
+      .rot-cw  { animation: rot-cw  5s linear infinite; transform-origin: 100px 100px; }
+      .pulse   { animation: pulse   2.2s ease-in-out infinite; transform-origin: 100px 100px; }
+
+      @keyframes rot-ccw { from { transform: rotate(0deg); } to { transform: rotate(-360deg); } }
+      @keyframes rot-cw  { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+      @keyframes pulse   {
+        0%,100% { transform: scale(1);   opacity: 1; }
+        50%     { transform: scale(1.15); opacity: 0.9; }
+      }
+    ]]></style>
+  </defs>
+
+  <!-- Outer ring -->
+  <circle class="rot-ccw"
+          cx="100" cy="100" r="75"
+          fill="none" stroke="url(#gradPrimary)" stroke-width="8" stroke-linecap="round"
+          stroke-dasharray="235 235" transform="rotate(-45 100 100)"/>
+
+  <!-- Inner ring -->
+  <circle class="rot-cw"
+          cx="100" cy="100" r="52"
+          fill="none" stroke="#764ba2" stroke-width="8" stroke-linecap="round"
+          stroke-dasharray="163 163" transform="rotate(135 100 100)"/>
+
+  <!-- Center orb -->
+  <circle class="pulse" cx="100" cy="100" r="30" fill="url(#gradOrb)"/>
+</svg>

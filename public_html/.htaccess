@@ -1,0 +1,27 @@
+# Enable Rewrite Engine
+RewriteEngine On
+
+# Disable directory browsing
+Options -Indexes
+
+# Protect sensitive files by extension
+<FilesMatch "\.(env|json|lock|gitignore|log|sh|sql|ini|conf|bak|backup)$">
+    Order allow,deny
+    Deny from all
+</FilesMatch>
+
+# Block direct access to sensitive directories EXCEPT specific allowed files
+# Block everything in these directories
+RewriteRule ^storage/(.*)?$ - [F,L]
+RewriteRule ^includes/(.*)?$ - [F,L]
+RewriteRule ^config/(.*)?$ - [F,L]
+RewriteRule ^middleware/(.*)?$ - [F,L]
+RewriteRule ^scripts/(.*)?$ - [F,L]
+RewriteRule ^vendor/(.*)?$ - [F,L]
+
+# For controllers, block everything EXCEPT auth/logout.php
+RewriteCond %{REQUEST_URI} !^/controllers/auth/logout\.php$
+RewriteCond %{REQUEST_URI} !^/controllers/auth/switch_context\.php$
+RewriteRule ^controllers/(.*)?$ - [F,L]
+
+# Rest of your .htaccess configuration...

@@ -1,0 +1,26 @@
+/* public_html/assets/css/receipt.css */
+/* 80mm thermal print layout */
+@page { size: 80mm auto; margin: 0; }
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+body { font: 12px/1.25 -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, Helvetica, Arial, sans-serif; color: #111; background: #fff; }
+
+.r-wrap { width: 80mm; padding: 6mm 4mm; }
+.r-head { text-align: center; margin-bottom: 6px; }
+.r-brand { font-weight: 700; font-size: 16px; margin-bottom: 2px; }
+.r-meta { font-size: 11px; color: #444; }
+.r-meta div { margin: 1px 0; }
+
+.r-lines table { width: 100%; border-collapse: collapse; margin-top: 6px; }
+.r-lines th, .r-lines td { text-align: left; padding: 2px 0; border-bottom: 1px dashed #ddd; }
+.r-lines thead th { border-bottom: 1px solid #000; font-weight: 700; }
+.r-lines tbody tr:last-child td { border-bottom: 1px solid #000; }
+.ta-r { text-align: right; }
+.muted { color: #666; font-size: 11px; }
+
+.r-totals { margin-top: 6px; }
+.r-totals .row { display: flex; justify-content: space-between; margin: 2px 0; }
+.r-totals .total { font-weight: 800; font-size: 14px; border-top: 1px solid #000; padding-top: 4px; }
+
+.r-notes { margin-top: 6px; }
+.r-footer { text-align: center; margin-top: 8px; font-size: 12px; }

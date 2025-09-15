@@ -1,0 +1,941 @@
+/* 
+ * /views/admin/rewards/cashback/_shared/styles.css
+ * Microsoft 365 Fluent Design System - Cashback Module
+ * Professional, Clean, and Consistent Styling
+ */
+
+/* ============================================
+   CSS VARIABLES - Microsoft 365 Color System
+   ============================================ */
+:root {
+    /* Primary Colors */
+    --ms-white: #ffffff;
+    --ms-black: #000000;
+    
+    /* Gray Scale */
+    --ms-gray-10: #faf9f8;
+    --ms-gray-20: #f3f2f1;
+    --ms-gray-30: #edebe9;
+    --ms-gray-40: #e1dfdd;
+    --ms-gray-50: #d2d0ce;
+    --ms-gray-60: #c8c6c4;
+    --ms-gray-90: #a19f9d;
+    --ms-gray-110: #8a8886;
+    --ms-gray-130: #605e5c;
+    --ms-gray-150: #3b3a39;
+    --ms-gray-160: #323130;
+    --ms-gray-190: #201f1e;
+    
+    /* Theme Colors */
+    --ms-blue: #0078d4;
+    --ms-blue-dark: #106ebe;
+    --ms-blue-darker: #005a9e;
+    --ms-blue-light: #deecf9;
+    --ms-blue-lighter: #f3f9fd;
+    
+    --ms-green: #107c10;
+    --ms-green-dark: #0b5a08;
+    --ms-green-light: #e6f4e6;
+    
+    --ms-red: #d13438;
+    --ms-red-dark: #a4262c;
+    --ms-red-light: #fdf2f2;
+    
+    --ms-yellow: #ffb900;
+    --ms-yellow-light: #fff8e6;
+    
+    --ms-purple: #5c2d91;
+    --ms-purple-light: #f4f0f9;
+    
+    /* Shadows */
+    --ms-shadow-1: 0 1.6px 3.6px 0 rgba(0,0,0,0.132), 0 0.3px 0.9px 0 rgba(0,0,0,0.108);
+    --ms-shadow-2: 0 3.2px 7.2px 0 rgba(0,0,0,0.132), 0 0.6px 1.8px 0 rgba(0,0,0,0.108);
+    --ms-shadow-3: 0 6.4px 14.4px 0 rgba(0,0,0,0.132), 0 1.2px 3.6px 0 rgba(0,0,0,0.108);
+    --ms-shadow-4: 0 12.8px 28.8px 0 rgba(0,0,0,0.132), 0 2.4px 7.2px 0 rgba(0,0,0,0.108);
+    
+    /* Spacing */
+    --ms-spacing-xs: 4px;
+    --ms-spacing-s: 8px;
+    --ms-spacing-m: 16px;
+    --ms-spacing-l: 24px;
+    --ms-spacing-xl: 32px;
+    --ms-spacing-xxl: 48px;
+    
+    /* Border Radius */
+    --ms-radius: 4px;
+    --ms-radius-lg: 8px;
+    
+    /* Transitions */
+    --ms-transition: all 0.1s cubic-bezier(0.1, 0.9, 0.2, 1);
+    --ms-transition-slow: all 0.3s cubic-bezier(0.1, 0.9, 0.2, 1);
+}
+
+/* ============================================
+   RESET & BASE STYLES
+   ============================================ */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, 'Roboto', 'Helvetica Neue', sans-serif;
+    background: var(--ms-gray-10);
+    color: var(--ms-gray-160);
+    font-size: 14px;
+    line-height: 20px;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+}
+
+/* ============================================
+   LAYOUT COMPONENTS
+   ============================================ */
+.container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: var(--ms-spacing-xl) var(--ms-spacing-xxl);
+}
+
+/* Page Header */
+.page-header {
+    margin-bottom: var(--ms-spacing-xl);
+}
+
+.h1 {
+    font-size: 32px;
+    font-weight: 600;
+    color: var(--ms-gray-160);
+    margin-bottom: var(--ms-spacing-s);
+    letter-spacing: -0.5px;
+}
+
+.sub {
+    font-size: 14px;
+    color: var(--ms-gray-130);
+    line-height: 20px;
+}
+
+/* ============================================
+   NAVIGATION TABS
+   ============================================ */
+.cashback-nav {
+    display: flex;
+    gap: 0;
+    margin-bottom: var(--ms-spacing-xl);
+    background: var(--ms-white);
+    border-radius: var(--ms-radius-lg);
+    box-shadow: var(--ms-shadow-1);
+    overflow: hidden;
+    border: 1px solid var(--ms-gray-30);
+}
+
+.cashback-nav-tab {
+    flex: 1;
+    padding: 14px var(--ms-spacing-l);
+    text-align: center;
+    text-decoration: none;
+    color: var(--ms-gray-130);
+    font-weight: 600;
+    font-size: 14px;
+    background: transparent;
+    border-right: 1px solid var(--ms-gray-30);
+    transition: var(--ms-transition);
+    position: relative;
+}
+
+.cashback-nav-tab:last-child {
+    border-right: none;
+}
+
+.cashback-nav-tab:hover {
+    background: var(--ms-gray-20);
+    color: var(--ms-gray-160);
+}
+
+.cashback-nav-tab.active {
+    background: var(--ms-blue);
+    color: var(--ms-white);
+}
+
+.cashback-nav-tab.active::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: var(--ms-blue-dark);
+}
+
+/* ============================================
+   STATISTICS CARDS
+   ============================================ */
+.stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: var(--ms-spacing-l);
+    margin-bottom: var(--ms-spacing-xl);
+}
+
+.stat-card {
+    background: var(--ms-white);
+    border-radius: var(--ms-radius-lg);
+    padding: var(--ms-spacing-l);
+    box-shadow: var(--ms-shadow-1);
+    border: 1px solid var(--ms-gray-30);
+    transition: var(--ms-transition);
+    position: relative;
+    overflow: hidden;
+}
+
+.stat-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 4px;
+    height: 100%;
+    background: var(--ms-blue);
+}
+
+.stat-card:nth-child(2)::before {
+    background: var(--ms-green);
+}
+
+.stat-card:nth-child(3)::before {
+    background: var(--ms-purple);
+}
+
+.stat-card:nth-child(4)::before {
+    background: var(--ms-yellow);
+}
+
+.stat-card:hover {
+    box-shadow: var(--ms-shadow-2);
+    transform: translateY(-2px);
+}
+
+.stat-value {
+    font-size: 32px;
+    font-weight: 700;
+    color: var(--ms-gray-160);
+    line-height: 1.2;
+    margin-bottom: var(--ms-spacing-xs);
+}
+
+.stat-label {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--ms-gray-110);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+/* ============================================
+   CARD COMPONENT
+   ============================================ */
+.card {
+    background: var(--ms-white);
+    border-radius: var(--ms-radius-lg);
+    box-shadow: var(--ms-shadow-1);
+    border: 1px solid var(--ms-gray-30);
+    overflow: hidden;
+    margin-bottom: var(--ms-spacing-xl);
+}
+
+.card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: var(--ms-spacing-l) var(--ms-spacing-xl);
+    background: linear-gradient(to bottom, var(--ms-white), var(--ms-gray-10));
+    border-bottom: 1px solid var(--ms-gray-30);
+}
+
+.card-title {
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--ms-gray-160);
+}
+
+/* ============================================
+   CONTROLS & FILTERS
+   ============================================ */
+.controls {
+    padding: var(--ms-spacing-m) var(--ms-spacing-xl);
+    background: var(--ms-gray-10);
+    border-bottom: 1px solid var(--ms-gray-30);
+    display: flex;
+    align-items: center;
+    gap: var(--ms-spacing-m);
+}
+
+.controls label {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--ms-gray-110);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+/* ============================================
+   TABLE STYLES
+   ============================================ */
+.scroll-body {
+    overflow-x: auto;
+    max-height: 600px;
+    overflow-y: auto;
+}
+
+.table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 14px;
+    background: var(--ms-white);
+}
+
+.table thead {
+    background: var(--ms-gray-20);
+    position: sticky;
+    top: 0;
+    z-index: 10;
+}
+
+.table th {
+    padding: 12px var(--ms-spacing-l);
+    text-align: left;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--ms-gray-110);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    border-bottom: 2px solid var(--ms-gray-40);
+    white-space: nowrap;
+}
+
+.table td {
+    padding: var(--ms-spacing-m) var(--ms-spacing-l);
+    border-bottom: 1px solid var(--ms-gray-20);
+    color: var(--ms-gray-160);
+    vertical-align: middle;
+}
+
+.table tbody tr {
+    transition: var(--ms-transition);
+}
+
+.table tbody tr:hover {
+    background: var(--ms-blue-lighter);
+}
+
+.table tbody tr:last-child td {
+    border-bottom: none;
+}
+
+/* ============================================
+   FORM ELEMENTS
+   ============================================ */
+.ms-input,
+input[type="text"],
+input[type="number"],
+input[type="date"],
+input[type="email"],
+input[type="tel"],
+textarea,
+select {
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid var(--ms-gray-60);
+    border-radius: var(--ms-radius);
+    background: var(--ms-white);
+    font-size: 14px;
+    color: var(--ms-gray-160);
+    transition: var(--ms-transition);
+    font-family: inherit;
+}
+
+.ms-input:hover,
+input:hover,
+textarea:hover,
+select:hover {
+    border-color: var(--ms-gray-110);
+}
+
+.ms-input:focus,
+input:focus,
+textarea:focus,
+select:focus {
+    outline: none;
+    border-color: var(--ms-blue);
+    box-shadow: 0 0 0 2px rgba(0, 120, 212, 0.2);
+}
+
+label {
+    display: block;
+    margin-bottom: var(--ms-spacing-s);
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--ms-gray-160);
+}
+
+.hint {
+    font-size: 12px;
+    color: var(--ms-gray-110);
+    margin-top: var(--ms-spacing-xs);
+}
+
+/* Form Sections */
+.form-section {
+    padding: var(--ms-spacing-xl);
+    border-bottom: 1px solid var(--ms-gray-30);
+}
+
+.form-section:last-child {
+    border-bottom: none;
+}
+
+.form-footer {
+    padding: var(--ms-spacing-l) var(--ms-spacing-xl);
+    background: var(--ms-gray-10);
+    border-top: 1px solid var(--ms-gray-30);
+    display: flex;
+    justify-content: flex-end;
+    gap: var(--ms-spacing-m);
+}
+
+/* ============================================
+   BUTTONS
+   ============================================ */
+.btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 9px 20px;
+    min-width: 96px;
+    border: 1px solid var(--ms-gray-50);
+    background: var(--ms-white);
+    border-radius: var(--ms-radius);
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--ms-gray-160);
+    text-decoration: none;
+    cursor: pointer;
+    transition: var(--ms-transition);
+    font-family: inherit;
+    white-space: nowrap;
+}
+
+.btn:hover {
+    background: var(--ms-gray-20);
+    border-color: var(--ms-gray-60);
+    transform: translateY(-1px);
+    box-shadow: var(--ms-shadow-1);
+}
+
+.btn:active {
+    transform: translateY(0);
+    box-shadow: none;
+}
+
+.btn.primary {
+    background: var(--ms-blue);
+    border-color: var(--ms-blue);
+    color: var(--ms-white);
+}
+
+.btn.primary:hover {
+    background: var(--ms-blue-dark);
+    border-color: var(--ms-blue-dark);
+}
+
+.btn.danger {
+    background: var(--ms-red);
+    border-color: var(--ms-red);
+    color: var(--ms-white);
+}
+
+.btn.danger:hover {
+    background: var(--ms-red-dark);
+    border-color: var(--ms-red-dark);
+}
+
+.btn.small {
+    padding: 6px 12px;
+    min-width: 64px;
+    font-size: 12px;
+}
+
+.btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    pointer-events: none;
+}
+
+/* ============================================
+   BADGES
+   ============================================ */
+.badge {
+    display: inline-block;
+    padding: 4px 10px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.badge.live {
+    background: var(--ms-green);
+    color: var(--ms-white);
+}
+
+.badge.info {
+    background: var(--ms-blue);
+    color: var(--ms-white);
+}
+
+.badge.danger {
+    background: var(--ms-red);
+    color: var(--ms-white);
+}
+
+.badge.warning {
+    background: var(--ms-yellow);
+    color: var(--ms-gray-160);
+}
+
+/* ============================================
+   INFO BOXES
+   ============================================ */
+.info-box {
+    background: linear-gradient(135deg, var(--ms-blue-lighter) 0%, var(--ms-blue-light) 100%);
+    border: 1px solid var(--ms-blue-light);
+    border-radius: var(--ms-radius-lg);
+    padding: var(--ms-spacing-l);
+    margin-bottom: var(--ms-spacing-l);
+    position: relative;
+    overflow: hidden;
+}
+
+.info-box::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: var(--ms-blue);
+}
+
+.info-box h4 {
+    margin: 0 0 var(--ms-spacing-s) 0;
+    color: var(--ms-blue-darker);
+    font-size: 16px;
+    font-weight: 600;
+}
+
+.info-box p {
+    margin: 0;
+    font-size: 14px;
+    color: var(--ms-gray-130);
+    line-height: 1.5;
+}
+
+/* ============================================
+   NOTICES & ALERTS
+   ============================================ */
+.notice {
+    padding: var(--ms-spacing-m) var(--ms-spacing-l);
+    border-radius: var(--ms-radius);
+    margin-bottom: var(--ms-spacing-l);
+    font-size: 14px;
+    display: flex;
+    align-items: center;
+    gap: var(--ms-spacing-m);
+}
+
+.notice.alert-ok {
+    background: var(--ms-green-light);
+    color: var(--ms-green-dark);
+    border: 1px solid var(--ms-green);
+}
+
+.notice.alert-error {
+    background: var(--ms-red-light);
+    color: var(--ms-red-dark);
+    border: 1px solid var(--ms-red);
+}
+
+.notice.alert-warning {
+    background: var(--ms-yellow-light);
+    color: var(--ms-gray-160);
+    border: 1px solid var(--ms-yellow);
+}
+
+/* ============================================
+   VISIT LADDER TABLE (SPECIFIC)
+   ============================================ */
+.ladder-wrap {
+    margin-top: var(--ms-spacing-m);
+}
+
+.ladder-table {
+    width: 100%;
+    border-collapse: collapse;
+    background: var(--ms-white);
+    border: 1px solid var(--ms-gray-30);
+    border-radius: var(--ms-radius);
+    overflow: hidden;
+}
+
+.ladder-table thead {
+    background: var(--ms-gray-20);
+}
+
+.ladder-table th {
+    padding: 12px var(--ms-spacing-m);
+    text-align: left;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--ms-gray-110);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.ladder-table td {
+    padding: 12px var(--ms-spacing-m);
+    border-top: 1px solid var(--ms-gray-30);
+}
+
+.ladder-table input {
+    width: 100%;
+}
+
+.ladder-actions {
+    margin-top: var(--ms-spacing-m);
+    display: flex;
+    align-items: center;
+    gap: var(--ms-spacing-m);
+}
+
+/* ============================================
+   TAG DROPDOWN COMPONENT
+   ============================================ */
+.tagbox {
+    position: relative;
+    margin-bottom: var(--ms-spacing-m);
+}
+
+.tagbox .control {
+    display: flex;
+    gap: var(--ms-spacing-s);
+    margin-bottom: var(--ms-spacing-s);
+}
+
+.tagbox .tag-search {
+    flex: 1;
+}
+
+.tagbox .dropdown {
+    position: absolute;
+    top: calc(100% + 4px);
+    left: 0;
+    right: 0;
+    background: var(--ms-white);
+    border: 1px solid var(--ms-gray-60);
+    border-radius: var(--ms-radius);
+    box-shadow: var(--ms-shadow-2);
+    max-height: 300px;
+    overflow-y: auto;
+    z-index: 100;
+    display: none;
+}
+
+.tagbox .dropdown.open {
+    display: block;
+}
+
+.tagbox .dropdown .opt {
+    padding: 10px 12px;
+    cursor: pointer;
+    transition: var(--ms-transition);
+}
+
+.tagbox .dropdown .opt:hover {
+    background: var(--ms-blue-lighter);
+    color: var(--ms-blue);
+}
+
+.tagbox .tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--ms-spacing-s);
+}
+
+.tagbox .tag {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--ms-spacing-s);
+    padding: 6px 10px;
+    background: var(--ms-blue-lighter);
+    border: 1px solid var(--ms-blue);
+    color: var(--ms-blue-darker);
+    border-radius: var(--ms-radius);
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.tagbox .tag.tag-all {
+    background: var(--ms-green-light);
+    border-color: var(--ms-green);
+    color: var(--ms-green-dark);
+}
+
+.tagbox .tag button {
+    background: none;
+    border: none;
+    color: inherit;
+    font-size: 16px;
+    cursor: pointer;
+    padding: 0;
+    width: 16px;
+    height: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* ============================================
+   MODAL DIALOGS
+   ============================================ */
+.modal {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.5);
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    padding: var(--ms-spacing-xl);
+}
+
+.modal-content {
+    background: var(--ms-white);
+    border-radius: var(--ms-radius-lg);
+    box-shadow: var(--ms-shadow-4);
+    width: 100%;
+    max-width: 800px;
+    max-height: 80vh;
+    display: flex;
+    flex-direction: column;
+}
+
+.modal-header {
+    padding: var(--ms-spacing-l);
+    border-bottom: 1px solid var(--ms-gray-30);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.modal-header h3 {
+    margin: 0;
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--ms-gray-160);
+}
+
+.modal-close {
+    background: none;
+    border: none;
+    font-size: 24px;
+    cursor: pointer;
+    color: var(--ms-gray-110);
+    padding: 0;
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: var(--ms-radius);
+    transition: var(--ms-transition);
+}
+
+.modal-close:hover {
+    background: var(--ms-gray-20);
+    color: var(--ms-gray-160);
+}
+
+.modal-body {
+    padding: var(--ms-spacing-l);
+    overflow-y: auto;
+    flex: 1;
+}
+
+/* ============================================
+   SUB-TABS (WALLETS PAGE)
+   ============================================ */
+.sub-tabs {
+    display: flex;
+    gap: 0;
+    margin: var(--ms-spacing-l) 0;
+    background: var(--ms-white);
+    border-radius: var(--ms-radius-lg);
+    box-shadow: var(--ms-shadow-1);
+    overflow: hidden;
+    border: 1px solid var(--ms-gray-30);
+}
+
+.sub-tab {
+    flex: 1;
+    padding: 12px 20px;
+    background: none;
+    border: none;
+    border-right: 1px solid var(--ms-gray-30);
+    color: var(--ms-gray-130);
+    font-weight: 600;
+    font-size: 14px;
+    cursor: pointer;
+    transition: var(--ms-transition);
+}
+
+.sub-tab:last-child {
+    border-right: none;
+}
+
+.sub-tab:hover {
+    background: var(--ms-gray-20);
+    color: var(--ms-gray-160);
+}
+
+.sub-tab.active {
+    background: var(--ms-blue-lighter);
+    color: var(--ms-blue);
+    border-bottom: 2px solid var(--ms-blue);
+}
+
+/* ============================================
+   LOADING SPINNER
+   ============================================ */
+.loading-spinner {
+    display: inline-block;
+    width: 14px;
+    height: 14px;
+    border: 2px solid var(--ms-gray-40);
+    border-top: 2px solid var(--ms-blue);
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+/* ============================================
+   HELPER CLASSES
+   ============================================ */
+.helper {
+    color: var(--ms-gray-110);
+    font-size: 12px;
+}
+
+.text-center {
+    text-align: center;
+}
+
+.text-right {
+    text-align: right;
+}
+
+.mt-0 { margin-top: 0; }
+.mb-0 { margin-bottom: 0; }
+.mt-1 { margin-top: var(--ms-spacing-s); }
+.mb-1 { margin-bottom: var(--ms-spacing-s); }
+.mt-2 { margin-top: var(--ms-spacing-m); }
+.mb-2 { margin-bottom: var(--ms-spacing-m); }
+.mt-3 { margin-top: var(--ms-spacing-l); }
+.mb-3 { margin-bottom: var(--ms-spacing-l); }
+
+/* ============================================
+   RESPONSIVE DESIGN
+   ============================================ */
+@media (max-width: 1200px) {
+    .container {
+        padding: var(--ms-spacing-l) var(--ms-spacing-xl);
+    }
+    
+    .stats-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+
+@media (max-width: 768px) {
+    .container {
+        padding: var(--ms-spacing-l);
+    }
+    
+    .card-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: var(--ms-spacing-m);
+    }
+    
+    .controls {
+        flex-direction: column;
+        align-items: stretch;
+    }
+    
+    .stats-grid {
+        grid-template-columns: 1fr;
+    }
+    
+    .table {
+        font-size: 13px;
+    }
+    
+    .table th,
+    .table td {
+        padding: 10px var(--ms-spacing-m);
+    }
+    
+    .form-footer {
+        flex-direction: column;
+    }
+    
+    .btn {
+        width: 100%;
+    }
+}
+
+@media (max-width: 480px) {
+    .container {
+        padding: var(--ms-spacing-m);
+    }
+    
+    .h1 {
+        font-size: 24px;
+    }
+    
+    .stat-value {
+        font-size: 24px;
+    }
+    
+    .cashback-nav {
+        flex-direction: column;
+    }
+    
+    .cashback-nav-tab {
+        border-right: none;
+        border-bottom: 1px solid var(--ms-gray-30);
+    }
+    
+    .cashback-nav-tab:last-child {
+        border-bottom: none;
+    }
+}
