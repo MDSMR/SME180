@@ -1,5 +1,5 @@
 ## 1. /public_html/pos/api/order/status.php
-```php
+
 <?php
 /**
  * SME 180 POS - Order Status API
