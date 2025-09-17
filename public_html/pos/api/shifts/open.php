@@ -1,5 +1,4 @@
 ## 1. /public_html/pos/api/shifts/open.php
-```php
 <?php
 /**
  * SME 180 POS - Shift Open API
