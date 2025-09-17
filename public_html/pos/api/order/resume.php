@@ -1,5 +1,4 @@
 ## 3. /public_html/pos/api/order/resume.php
-```php
 <?php
 /**
  * SME 180 POS - Resume Order API
