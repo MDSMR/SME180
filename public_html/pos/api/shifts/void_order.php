@@ -1,5 +1,5 @@
 ## 4. /public_html/pos/api/order/void_order.php
-```php
+
 <?php
 /**
  * SME 180 POS - Void Entire Order API
