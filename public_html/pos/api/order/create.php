@@ -1,329 +1,187 @@
 <?php
 /**
- * SME 180 POS - Order Creation API
+ * SME 180 POS - Create Order API
  * Path: /public_html/pos/api/order/create.php
  * 
- * Creates new orders with items, variations, and automatic calculations
- * Handles discounts, service charges, and tax calculations
+ * Creates new orders with items, customer info, and initial calculations
  */
 
 declare(strict_types=1);
+error_reporting(E_ALL);
+ini_set('display_errors', '0');
 
+header('Content-Type: application/json; charset=utf-8');
+header('Access-Control-Allow-Origin: *');
+header('Access-Control-Allow-Methods: POST, OPTIONS');
+header('Access-Control-Allow-Headers: Content-Type, Authorization');
+
+if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
+    http_response_code(200);
+    exit;
+}
+
+// Include required files
 require_once __DIR__ . '/../../../config/db.php';
 require_once __DIR__ . '/../../../middleware/pos_auth.php';
 
-// Authentication check
-pos_auth_require_login();
-$user = pos_get_current_user();
-
-// Get tenant and branch from session
-$tenantId = (int)($_SESSION['tenant_id'] ?? 0);
-$branchId = (int)($_SESSION['branch_id'] ?? 0);
-$userId = (int)($_SESSION['user_id'] ?? 0);
-$stationId = (int)($_SESSION['station_id'] ?? 0);
-
-if (!$tenantId || !$branchId || !$userId) {
-    json_response(['success' => false, 'error' => 'Invalid session'], 401);
+// Start session if not started
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
 }
 
-// Parse request
-$input = json_decode(file_get_contents('php://input'), true);
-if (!$input) {
-    json_response(['success' => false, 'error' => 'Invalid request body'], 400);
-}
-
-// Validate required fields
-$requiredFields = ['order_type', 'items'];
-foreach ($requiredFields as $field) {
-    if (!isset($input[$field])) {
-        json_response(['success' => false, 'error' => "Missing required field: $field"], 400);
-    }
-}
-
-// Extract order data
-$orderType = $input['order_type'] ?? 'dine_in';
-$tableId = $input['table_id'] ?? null;
-$customerId = $input['customer_id'] ?? null;
-$customerName = $input['customer_name'] ?? null;
-$guestCount = $input['guest_count'] ?? 1;
-$notes = $input['notes'] ?? '';
-$items = $input['items'] ?? [];
-
-// Validate order type
-$validOrderTypes = ['dine_in', 'takeaway', 'delivery', 'pickup'];
-if (!in_array($orderType, $validOrderTypes)) {
-    json_response(['success' => false, 'error' => 'Invalid order type'], 400);
-}
-
-// Validate items
-if (empty($items)) {
-    json_response(['success' => false, 'error' => 'Order must have at least one item'], 400);
-}
-
-// For dine-in orders, table is required
-if ($orderType === 'dine_in' && !$tableId) {
-    json_response(['success' => false, 'error' => 'Table is required for dine-in orders'], 400);
+// Helper function for JSON responses
+function json_response($data, $code = 200) {
+    http_response_code($code);
+    echo json_encode($data, JSON_UNESCAPED_UNICODE);
+    exit;
 }
 
 try {
+    // Authentication check
+    if (!function_exists('pos_auth_require_login')) {
+        json_response(['success' => false, 'error' => 'Auth function not found'], 500);
+    }
+    
+    pos_auth_require_login();
+    $user = pos_get_current_user();
+    
+    if (!$user) {
+        json_response(['success' => false, 'error' => 'Not authenticated'], 401);
+    }
+    
+    // Get tenant and branch from session
+    $tenantId = (int)($_SESSION['tenant_id'] ?? 0);
+    $branchId = (int)($_SESSION['branch_id'] ?? 0);
+    $userId = (int)($_SESSION['user_id'] ?? 0);
+    $stationId = (int)($_SESSION['station_id'] ?? 0);
+    
+    if (!$tenantId || !$branchId || !$userId) {
+        json_response(['success' => false, 'error' => 'Invalid session'], 401);
+    }
+    
+    // Parse request
+    $input = json_decode(file_get_contents('php://input'), true);
+    if (!$input) {
+        json_response(['success' => false, 'error' => 'Invalid request body'], 400);
+    }
+    
+    // Extract order details
+    $orderType = $input['order_type'] ?? 'dine_in';
+    $tableId = isset($input['table_id']) ? (int)$input['table_id'] : null;
+    $customerName = $input['customer_name'] ?? null;
+    $customerPhone = $input['customer_phone'] ?? null;
+    $customerId = isset($input['customer_id']) ? (int)$input['customer_id'] : null;
+    $notes = $input['notes'] ?? '';
+    $items = $input['items'] ?? [];
+    
+    // Validate required fields
+    if (empty($items)) {
+        json_response(['success' => false, 'error' => 'Order must have at least one item'], 400);
+    }
+    
+    if ($orderType === 'dine_in' && !$tableId) {
+        json_response(['success' => false, 'error' => 'Table is required for dine-in orders'], 400);
+    }
+    
+    // Get database connection
     $pdo = db();
     $pdo->beginTransaction();
     
-    // Get settings for calculations
-    $settings = [];
+    // Get currency symbol from settings
     $stmt = $pdo->prepare("
-        SELECT `key`, `value` 
-        FROM settings 
+        SELECT value FROM settings 
         WHERE tenant_id = :tenant_id 
-        AND `key` IN (
-            'tax_rate', 'tax_type', 'currency_symbol',
-            'pos_service_charge_auto', 'pos_service_charge_percent',
-            'pos_enable_tips', 'pos_tip_suggestions'
-        )
+        AND `key` = 'currency_symbol' 
+        LIMIT 1
     ");
     $stmt->execute(['tenant_id' => $tenantId]);
+    $currencySymbol = $stmt->fetchColumn() ?: '$';
+    
+    // Get tax and service charge settings
+    $stmt = $pdo->prepare("
+        SELECT `key`, value FROM settings 
+        WHERE tenant_id = :tenant_id 
+        AND `key` IN ('pos_tax_rate', 'pos_default_service_charge')
+    ");
+    $stmt->execute(['tenant_id' => $tenantId]);
+    $settings = [];
     while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
         $settings[$row['key']] = $row['value'];
     }
     
-    $taxRate = (float)($settings['tax_rate'] ?? 0);
-    $taxType = $settings['tax_type'] ?? 'exclusive';
-    $currencySymbol = $settings['currency_symbol'] ?? 'EGP';
-    $autoServiceCharge = (bool)($settings['pos_service_charge_auto'] ?? false);
-    $serviceChargePercent = (float)($settings['pos_service_charge_percent'] ?? 0);
+    $taxRate = (float)($settings['pos_tax_rate'] ?? 0);
+    $defaultServiceCharge = (float)($settings['pos_default_service_charge'] ?? 0);
     
-    // Validate table if provided
-    if ($tableId) {
+    // Check if table is available (for dine-in)
+    if ($orderType === 'dine_in' && $tableId) {
         $stmt = $pdo->prepare("
-            SELECT id, table_number, zone_id, is_occupied 
-            FROM dining_tables 
-            WHERE id = :id 
-            AND tenant_id = :tenant_id 
-            AND branch_id = :branch_id
-            AND is_active = 1
+            SELECT id FROM orders 
+            WHERE tenant_id = :tenant_id 
+            AND branch_id = :branch_id 
+            AND table_id = :table_id 
+            AND status NOT IN ('closed', 'voided', 'refunded')
+            AND payment_status != 'paid'
+            LIMIT 1
         ");
         $stmt->execute([
-            'id' => $tableId,
             'tenant_id' => $tenantId,
-            'branch_id' => $branchId
+            'branch_id' => $branchId,
+            'table_id' => $tableId
         ]);
-        $table = $stmt->fetch(PDO::FETCH_ASSOC);
         
-        if (!$table) {
-            json_response(['success' => false, 'error' => 'Invalid table'], 400);
-        }
-        
-        // Check if table is already occupied
-        if ($table['is_occupied']) {
-            $stmt = $pdo->prepare("
-                SELECT COUNT(*) as count 
-                FROM orders 
-                WHERE table_id = :table_id 
-                AND status NOT IN ('closed', 'voided', 'refunded')
-                AND tenant_id = :tenant_id
-            ");
-            $stmt->execute([
-                'table_id' => $tableId,
-                'tenant_id' => $tenantId
-            ]);
-            $activeOrders = $stmt->fetch(PDO::FETCH_ASSOC);
-            
-            if ($activeOrders['count'] > 0) {
-                json_response(['success' => false, 'error' => 'Table already has an active order'], 400);
-            }
+        if ($stmt->fetchColumn()) {
+            json_response(['success' => false, 'error' => 'Table already has an active order'], 400);
         }
     }
     
-    // Calculate order totals
+    // Generate order reference
+    $prefix = date('Ymd');
+    $stmt = $pdo->prepare("
+        SELECT COUNT(*) + 1 FROM orders 
+        WHERE tenant_id = :tenant_id 
+        AND branch_id = :branch_id 
+        AND DATE(created_at) = CURDATE()
+    ");
+    $stmt->execute([
+        'tenant_id' => $tenantId,
+        'branch_id' => $branchId
+    ]);
+    $orderNumber = $stmt->fetchColumn();
+    $receiptReference = sprintf('ORD%s%04d', $prefix, $orderNumber);
+    
+    // Calculate totals
     $subtotal = 0;
-    $totalDiscount = 0;
-    $processedItems = [];
+    $totalQuantity = 0;
     
     foreach ($items as $item) {
-        if (!isset($item['product_id']) || !isset($item['quantity'])) {
-            json_response(['success' => false, 'error' => 'Invalid item structure'], 400);
-        }
-        
-        $productId = (int)$item['product_id'];
-        $quantity = (int)$item['quantity'];
-        
-        if ($quantity <= 0) {
-            json_response(['success' => false, 'error' => 'Invalid quantity'], 400);
-        }
-        
-        // Get product details
-        $stmt = $pdo->prepare("
-            SELECT id, name, price, category_id, is_active, is_inventory_tracked
-            FROM products 
-            WHERE id = :id 
-            AND tenant_id = :tenant_id 
-            AND is_active = 1
-        ");
-        $stmt->execute([
-            'id' => $productId,
-            'tenant_id' => $tenantId
-        ]);
-        $product = $stmt->fetch(PDO::FETCH_ASSOC);
-        
-        if (!$product) {
-            json_response(['success' => false, 'error' => "Product not found: $productId"], 400);
-        }
-        
-        $unitPrice = (float)$product['price'];
-        $variationTotal = 0;
-        $variations = [];
-        
-        // Process variations if provided
-        if (!empty($item['variations']) && is_array($item['variations'])) {
-            foreach ($item['variations'] as $variation) {
-                $groupId = (int)($variation['group_id'] ?? 0);
-                $valueId = (int)($variation['value_id'] ?? 0);
-                
-                // Validate variation
-                $stmt = $pdo->prepare("
-                    SELECT vg.id as group_id, vg.name as group_name, 
-                           vv.id as value_id, vv.value_name, vv.price_delta
-                    FROM variation_groups vg
-                    JOIN variation_values vv ON vv.variation_group_id = vg.id
-                    WHERE vg.id = :group_id 
-                    AND vv.id = :value_id
-                    AND vg.tenant_id = :tenant_id
-                    AND vg.is_active = 1
-                ");
-                $stmt->execute([
-                    'group_id' => $groupId,
-                    'value_id' => $valueId,
-                    'tenant_id' => $tenantId
-                ]);
-                $varData = $stmt->fetch(PDO::FETCH_ASSOC);
-                
-                if ($varData) {
-                    $priceDelta = (float)$varData['price_delta'];
-                    $variationTotal += $priceDelta;
-                    $variations[] = [
-                        'group_id' => $groupId,
-                        'group_name' => $varData['group_name'],
-                        'value_id' => $valueId,
-                        'value_name' => $varData['value_name'],
-                        'price_delta' => $priceDelta
-                    ];
-                }
-            }
-        }
-        
-        // Calculate line totals
-        $lineSubtotal = ($unitPrice + $variationTotal) * $quantity;
-        $lineDiscount = 0;
-        
-        // Apply item-level discount if provided
-        if (isset($item['discount_amount']) && $item['discount_amount'] > 0) {
-            $lineDiscount = min((float)$item['discount_amount'], $lineSubtotal);
-            $totalDiscount += $lineDiscount;
-        } elseif (isset($item['discount_percent']) && $item['discount_percent'] > 0) {
-            $discountPercent = min((float)$item['discount_percent'], 100);
-            $lineDiscount = $lineSubtotal * ($discountPercent / 100);
-            $totalDiscount += $lineDiscount;
-        }
-        
-        $lineTotal = $lineSubtotal - $lineDiscount;
-        $subtotal += $lineSubtotal;
-        
-        $processedItems[] = [
-            'product_id' => $productId,
-            'product_name' => $product['name'],
-            'unit_price' => $unitPrice,
-            'quantity' => $quantity,
-            'variations' => $variations,
-            'variation_total' => $variationTotal,
-            'line_subtotal' => $lineSubtotal,
-            'discount_amount' => $lineDiscount,
-            'line_total' => $lineTotal,
-            'notes' => $item['notes'] ?? '',
-            'kitchen_notes' => $item['kitchen_notes'] ?? '',
-            'fire_status' => 'pending',
-            'state' => 'held'
-        ];
+        $quantity = (float)($item['quantity'] ?? 1);
+        $unitPrice = (float)($item['unit_price'] ?? 0);
+        $subtotal += ($quantity * $unitPrice);
+        $totalQuantity += $quantity;
     }
     
-    // Apply order-level discount if provided
-    $orderDiscountAmount = 0;
-    $orderDiscountType = null;
-    $orderDiscountValue = null;
+    // Calculate charges
+    $serviceChargeAmount = $defaultServiceCharge > 0 ? ($subtotal * $defaultServiceCharge / 100) : 0;
+    $taxableAmount = $subtotal + $serviceChargeAmount;
+    $taxAmount = $taxRate > 0 ? ($taxableAmount * $taxRate / 100) : 0;
+    $totalAmount = $subtotal + $serviceChargeAmount + $taxAmount;
     
-    if (isset($input['discount'])) {
-        $discount = $input['discount'];
-        
-        // Check permission for manual discounts
-        if ($discount['type'] === 'manual') {
-            $hasPermission = check_user_permission($pdo, $userId, 'pos.apply_discount');
-            if (!$hasPermission) {
-                json_response(['success' => false, 'error' => 'No permission to apply discounts'], 403);
-            }
-        }
-        
-        if ($discount['type'] === 'percent') {
-            $discountPercent = min((float)$discount['value'], 100);
-            $orderDiscountAmount = ($subtotal - $totalDiscount) * ($discountPercent / 100);
-            $orderDiscountType = 'percent';
-            $orderDiscountValue = $discountPercent;
-        } elseif ($discount['type'] === 'fixed') {
-            $orderDiscountAmount = min((float)$discount['value'], $subtotal - $totalDiscount);
-            $orderDiscountType = 'fixed';
-            $orderDiscountValue = $orderDiscountAmount;
-        }
-        
-        $totalDiscount += $orderDiscountAmount;
-    }
-    
-    // Calculate service charge
-    $serviceChargeAmount = 0;
-    if ($orderType === 'dine_in' && $autoServiceCharge && $serviceChargePercent > 0) {
-        $serviceChargeAmount = ($subtotal - $totalDiscount) * ($serviceChargePercent / 100);
-    }
-    
-    // Calculate tax
-    $taxableAmount = $subtotal - $totalDiscount + $serviceChargeAmount;
-    $taxAmount = 0;
-    
-    if ($taxRate > 0) {
-        if ($taxType === 'inclusive') {
-            // Tax is already included in the price
-            $taxAmount = $taxableAmount - ($taxableAmount / (1 + $taxRate / 100));
-        } else {
-            // Tax is exclusive (added on top)
-            $taxAmount = $taxableAmount * ($taxRate / 100);
-        }
-    }
-    
-    // Calculate final total
-    $totalAmount = $subtotal - $totalDiscount + $serviceChargeAmount;
-    if ($taxType === 'exclusive') {
-        $totalAmount += $taxAmount;
-    }
-    
-    // Generate receipt reference
-    $receiptReference = 'ORD-' . date('Ymd') . '-' . str_pad((string)mt_rand(1, 9999), 4, '0', STR_PAD_LEFT);
-    
-    // Create the order
+    // Create order
     $stmt = $pdo->prepare("
         INSERT INTO orders (
-            tenant_id, branch_id, station_id, created_by_user_id,
-            receipt_reference, order_type, status, payment_status,
-            table_id, customer_id, customer_name, guest_count,
-            subtotal_amount, discount_amount, discount_type, discount_value,
-            service_charge_amount, service_charge_percent,
-            tax_amount, tax_percent, total_amount,
-            order_notes, kitchen_status, source_channel,
-            created_at, created_date
+            tenant_id, branch_id, station_id, cashier_id,
+            receipt_reference, order_type, table_id,
+            customer_id, customer_name, customer_phone,
+            subtotal, tax_amount, service_charge, total_amount,
+            payment_status, status, notes,
+            kitchen_status, parked, created_at, updated_at
         ) VALUES (
-            :tenant_id, :branch_id, :station_id, :user_id,
-            :receipt_reference, :order_type, 'open', 'unpaid',
-            :table_id, :customer_id, :customer_name, :guest_count,
-            :subtotal, :discount_amount, :discount_type, :discount_value,
-            :service_charge_amount, :service_charge_percent,
-            :tax_amount, :tax_percent, :total_amount,
-            :notes, 'pending', 'pos',
-            NOW(), CURDATE()
+            :tenant_id, :branch_id, :station_id, :cashier_id,
+            :receipt_reference, :order_type, :table_id,
+            :customer_id, :customer_name, :customer_phone,
+            :subtotal, :tax_amount, :service_charge, :total_amount,
+            'unpaid', 'open', :notes,
+            'pending', 0, NOW(), NOW()
         )
     ");
     
@@ -331,21 +189,16 @@ try {
         'tenant_id' => $tenantId,
         'branch_id' => $branchId,
         'station_id' => $stationId,
-        'user_id' => $userId,
+        'cashier_id' => $userId,
         'receipt_reference' => $receiptReference,
         'order_type' => $orderType,
         'table_id' => $tableId,
         'customer_id' => $customerId,
         'customer_name' => $customerName,
-        'guest_count' => $guestCount,
+        'customer_phone' => $customerPhone,
         'subtotal' => $subtotal,
-        'discount_amount' => $totalDiscount,
-        'discount_type' => $orderDiscountType,
-        'discount_value' => $orderDiscountValue,
-        'service_charge_amount' => $serviceChargeAmount,
-        'service_charge_percent' => $serviceChargePercent,
         'tax_amount' => $taxAmount,
-        'tax_percent' => $taxRate,
+        'service_charge' => $serviceChargeAmount,
         'total_amount' => $totalAmount,
         'notes' => $notes
     ]);
@@ -353,182 +206,186 @@ try {
     $orderId = (int)$pdo->lastInsertId();
     
     // Insert order items
-    $itemStmt = $pdo->prepare("
+    $stmt = $pdo->prepare("
         INSERT INTO order_items (
-            order_id, product_id, product_name, unit_price, quantity,
-            line_subtotal, discount_amount, line_total,
-            notes, kitchen_notes, state, fire_status,
-            created_at
+            order_id, tenant_id, branch_id,
+            product_id, product_name, quantity, unit_price,
+            subtotal, tax_amount, total_amount,
+            notes, kitchen_status, created_at
         ) VALUES (
-            :order_id, :product_id, :product_name, :unit_price, :quantity,
-            :line_subtotal, :discount_amount, :line_total,
-            :notes, :kitchen_notes, :state, :fire_status,
-            NOW()
+            :order_id, :tenant_id, :branch_id,
+            :product_id, :product_name, :quantity, :unit_price,
+            :subtotal, :tax_amount, :total_amount,
+            :notes, 'pending', NOW()
         )
     ");
     
-    $variationStmt = $pdo->prepare("
-        INSERT INTO order_item_variations (
-            order_item_id, variation_group, variation_value, price_delta
-        ) VALUES (
-            :item_id, :group_name, :value_name, :price_delta
-        )
-    ");
-    
-    foreach ($processedItems as $item) {
-        $itemStmt->execute([
+    $insertedItems = [];
+    foreach ($items as $item) {
+        $productId = isset($item['product_id']) ? (int)$item['product_id'] : null;
+        $productName = $item['product_name'] ?? 'Unknown Item';
+        $quantity = (float)($item['quantity'] ?? 1);
+        $unitPrice = (float)($item['unit_price'] ?? 0);
+        $itemSubtotal = $quantity * $unitPrice;
+        $itemTax = $taxRate > 0 ? ($itemSubtotal * $taxRate / 100) : 0;
+        $itemTotal = $itemSubtotal + $itemTax;
+        $itemNotes = $item['notes'] ?? '';
+        
+        $stmt->execute([
             'order_id' => $orderId,
-            'product_id' => $item['product_id'],
-            'product_name' => $item['product_name'],
-            'unit_price' => $item['unit_price'],
-            'quantity' => $item['quantity'],
-            'line_subtotal' => $item['line_subtotal'],
-            'discount_amount' => $item['discount_amount'],
-            'line_total' => $item['line_total'],
-            'notes' => $item['notes'],
-            'kitchen_notes' => $item['kitchen_notes'],
-            'state' => $item['state'],
-            'fire_status' => $item['fire_status']
+            'tenant_id' => $tenantId,
+            'branch_id' => $branchId,
+            'product_id' => $productId,
+            'product_name' => $productName,
+            'quantity' => $quantity,
+            'unit_price' => $unitPrice,
+            'subtotal' => $itemSubtotal,
+            'tax_amount' => $itemTax,
+            'total_amount' => $itemTotal,
+            'notes' => $itemNotes
         ]);
         
         $itemId = (int)$pdo->lastInsertId();
         
-        // Insert variations
-        foreach ($item['variations'] as $variation) {
-            $variationStmt->execute([
-                'item_id' => $itemId,
-                'group_name' => $variation['group_name'],
-                'value_name' => $variation['value_name'],
-                'price_delta' => $variation['price_delta']
-            ]);
+        // Handle modifiers if present
+        if (!empty($item['modifiers'])) {
+            $modStmt = $pdo->prepare("
+                INSERT INTO order_item_modifiers (
+                    order_item_id, modifier_id, modifier_name,
+                    quantity, unit_price, total_price
+                ) VALUES (
+                    :item_id, :modifier_id, :modifier_name,
+                    :quantity, :unit_price, :total_price
+                )
+            ");
+            
+            foreach ($item['modifiers'] as $modifier) {
+                $modStmt->execute([
+                    'item_id' => $itemId,
+                    'modifier_id' => isset($modifier['id']) ? (int)$modifier['id'] : null,
+                    'modifier_name' => $modifier['name'] ?? '',
+                    'quantity' => (float)($modifier['quantity'] ?? 1),
+                    'unit_price' => (float)($modifier['price'] ?? 0),
+                    'total_price' => (float)($modifier['quantity'] ?? 1) * (float)($modifier['price'] ?? 0)
+                ]);
+            }
         }
+        
+        $insertedItems[] = [
+            'id' => $itemId,
+            'product_id' => $productId,
+            'product_name' => $productName,
+            'quantity' => $quantity,
+            'unit_price' => $unitPrice,
+            'total' => $itemTotal
+        ];
     }
     
-    // Update table status if dine-in
-    if ($orderType === 'dine_in' && $tableId) {
-        $stmt = $pdo->prepare("
-            UPDATE dining_tables 
-            SET is_occupied = 1,
-                last_occupied_at = NOW()
-            WHERE id = :id
-        ");
-        $stmt->execute(['id' => $tableId]);
-    }
-    
-    // Log order creation event
+    // Log order creation
     $stmt = $pdo->prepare("
-        INSERT INTO order_item_events (
-            tenant_id, order_id, event_type, payload, created_by, created_at
+        INSERT INTO order_logs (
+            order_id, tenant_id, branch_id, user_id,
+            action, details, created_at
         ) VALUES (
-            :tenant_id, :order_id, 'add', :payload, :user_id, NOW()
+            :order_id, :tenant_id, :branch_id, :user_id,
+            'created', :details, NOW()
         )
     ");
+    
     $stmt->execute([
-        'tenant_id' => $tenantId,
         'order_id' => $orderId,
-        'payload' => json_encode([
-            'items_count' => count($processedItems),
-            'total_amount' => $totalAmount
-        ]),
-        'user_id' => $userId
+        'tenant_id' => $tenantId,
+        'branch_id' => $branchId,
+        'user_id' => $userId,
+        'details' => json_encode([
+            'receipt_reference' => $receiptReference,
+            'order_type' => $orderType,
+            'items_count' => count($items),
+            'total' => $totalAmount
+        ])
     ]);
     
-    // Record order-level discount if applied
-    if ($orderDiscountAmount > 0 && isset($discount)) {
+    // Check if auto-fire is enabled
+    $stmt = $pdo->prepare("
+        SELECT value FROM settings 
+        WHERE tenant_id = :tenant_id 
+        AND `key` = 'pos_auto_fire_orders' 
+        LIMIT 1
+    ");
+    $stmt->execute(['tenant_id' => $tenantId]);
+    $autoFire = $stmt->fetchColumn() === 'true';
+    
+    if ($autoFire) {
+        // Auto-fire to kitchen
         $stmt = $pdo->prepare("
-            INSERT INTO order_discounts_applied (
-                tenant_id, branch_id, order_id, 
-                discount_type, discount_source, discount_name,
-                original_amount, discount_value, discount_amount,
-                applied_by, applied_at
+            UPDATE orders 
+            SET kitchen_status = 'sent', fired_at = NOW() 
+            WHERE id = :order_id
+        ");
+        $stmt->execute(['order_id' => $orderId]);
+        
+        $stmt = $pdo->prepare("
+            UPDATE order_items 
+            SET kitchen_status = 'pending', fired_at = NOW() 
+            WHERE order_id = :order_id
+        ");
+        $stmt->execute(['order_id' => $orderId]);
+        
+        // Create fire log
+        $stmt = $pdo->prepare("
+            INSERT INTO order_fire_logs (
+                order_id, tenant_id, branch_id, fired_by,
+                station_id, items_fired, fired_at
             ) VALUES (
-                :tenant_id, :branch_id, :order_id,
-                :discount_type, :discount_source, :discount_name,
-                :original_amount, :discount_value, :discount_amount,
-                :applied_by, NOW()
+                :order_id, :tenant_id, :branch_id, :fired_by,
+                :station_id, :items_fired, NOW()
             )
         ");
+        
         $stmt->execute([
+            'order_id' => $orderId,
             'tenant_id' => $tenantId,
             'branch_id' => $branchId,
-            'order_id' => $orderId,
-            'discount_type' => $orderDiscountType,
-            'discount_source' => $discount['source'] ?? 'manual',
-            'discount_name' => $discount['name'] ?? 'Manual Discount',
-            'original_amount' => $subtotal,
-            'discount_value' => $orderDiscountValue,
-            'discount_amount' => $orderDiscountAmount,
-            'applied_by' => $userId
+            'fired_by' => $userId,
+            'station_id' => $stationId,
+            'items_fired' => json_encode(array_column($insertedItems, 'id'))
         ]);
     }
     
     $pdo->commit();
     
-    // Prepare response
-    $response = [
+    // Return success response
+    json_response([
         'success' => true,
         'order' => [
             'id' => $orderId,
             'receipt_reference' => $receiptReference,
             'order_type' => $orderType,
-            'status' => 'open',
-            'payment_status' => 'unpaid',
             'table_id' => $tableId,
-            'customer_id' => $customerId,
             'customer_name' => $customerName,
-            'guest_count' => $guestCount,
-            'subtotal' => round($subtotal, 2),
-            'discount' => round($totalDiscount, 2),
-            'service_charge' => round($serviceChargeAmount, 2),
-            'tax' => round($taxAmount, 2),
-            'total' => round($totalAmount, 2),
-            'currency' => $currencySymbol,
-            'items_count' => count($processedItems),
-            'created_at' => date('Y-m-d H:i:s')
-        ]
-    ];
+            'subtotal' => $subtotal,
+            'tax_amount' => $taxAmount,
+            'service_charge' => $serviceChargeAmount,
+            'total_amount' => $totalAmount,
+            'currency_symbol' => $currencySymbol,
+            'items' => $insertedItems,
+            'auto_fired' => $autoFire,
+            'status' => 'open',
+            'payment_status' => 'unpaid'
+        ],
+        'message' => $autoFire ? 'Order created and sent to kitchen' : 'Order created successfully'
+    ]);
     
-    json_response($response);
-    
+} catch (PDOException $e) {
+    if (isset($pdo) && $pdo->inTransaction()) {
+        $pdo->rollBack();
+    }
+    error_log('Order creation DB error: ' . $e->getMessage());
+    json_response(['success' => false, 'error' => 'Database error: ' . $e->getMessage()], 500);
 } catch (Exception $e) {
     if (isset($pdo) && $pdo->inTransaction()) {
         $pdo->rollBack();
     }
-    
     error_log('Order creation error: ' . $e->getMessage());
-    json_response([
-        'success' => false,
-        'error' => 'Failed to create order',
-        'details' => $e->getMessage()
-    ], 500);
+    json_response(['success' => false, 'error' => $e->getMessage()], 500);
 }
-
-/**
- * Check if user has specific permission
- */
-function check_user_permission($pdo, $userId, $capability) {
-    $stmt = $pdo->prepare("
-        SELECT COUNT(*) as has_permission
-        FROM users u
-        JOIN pos_role_capabilities rc ON rc.role_key = u.role_key
-        WHERE u.id = :user_id
-        AND rc.capability_key = :capability
-    ");
-    $stmt->execute([
-        'user_id' => $userId,
-        'capability' => $capability
-    ]);
-    $result = $stmt->fetch(PDO::FETCH_ASSOC);
-    return $result['has_permission'] > 0;
-}
-
-/**
- * Send JSON response
- */
-function json_response($data, $statusCode = 200) {
-    http_response_code($statusCode);
-    header('Content-Type: application/json');
-    echo json_encode($data);
-    exit;
-}
-?>
