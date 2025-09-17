@@ -1,5 +1,4 @@
 ## 2. /public_html/pos/api/shifts/close.php
-```php
 <?php
 /**
  * SME 180 POS - Shift Close API
