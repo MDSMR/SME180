@@ -1,4 +1,3 @@
-## 2. /public_html/pos/api/order/park.php
 <?php
 /**
  * SME 180 POS - Park Order API
@@ -8,36 +7,72 @@
  */
 
 declare(strict_types=1);
+error_reporting(E_ALL);
+ini_set('display_errors', '0');
 
+header('Content-Type: application/json; charset=utf-8');
+header('Access-Control-Allow-Origin: *');
+header('Access-Control-Allow-Methods: POST, OPTIONS');
+header('Access-Control-Allow-Headers: Content-Type, Authorization');
+
+if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
+    http_response_code(200);
+    exit;
+}
+
+// Include required files
 require_once __DIR__ . '/../../../config/db.php';
 require_once __DIR__ . '/../../../middleware/pos_auth.php';
 
-pos_auth_require_login();
-$user = pos_get_current_user();
-
-$tenantId = (int)($_SESSION['tenant_id'] ?? 0);
-$branchId = (int)($_SESSION['branch_id'] ?? 0);
-$userId = (int)($_SESSION['user_id'] ?? 0);
-
-if (!$tenantId || !$branchId || !$userId) {
-    json_response(['success' => false, 'error' => 'Invalid session'], 401);
+// Start session if not started
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
 }
 
-$input = json_decode(file_get_contents('php://input'), true);
-
-if (!isset($input['order_id'])) {
-    json_response(['success' => false, 'error' => 'Order ID is required'], 400);
+// Helper function for JSON responses
+function json_response($data, $code = 200) {
+    http_response_code($code);
+    echo json_encode($data, JSON_UNESCAPED_UNICODE);
+    exit;
 }
-
-$orderId = (int)$input['order_id'];
-$parkReason = $input['reason'] ?? '';
-$parkLabel = $input['label'] ?? 'Parked Order #' . $orderId;
 
 try {
+    // Authentication check
+    pos_auth_require_login();
+    $user = pos_get_current_user();
+    
+    if (!$user) {
+        json_response(['success' => false, 'error' => 'Not authenticated'], 401);
+    }
+    
+    // Get tenant and branch from session
+    $tenantId = (int)($_SESSION['tenant_id'] ?? 0);
+    $branchId = (int)($_SESSION['branch_id'] ?? 0);
+    $userId = (int)($_SESSION['user_id'] ?? 0);
+    
+    if (!$tenantId || !$branchId || !$userId) {
+        json_response(['success' => false, 'error' => 'Invalid session'], 401);
+    }
+    
+    // Parse request
+    $input = json_decode(file_get_contents('php://input'), true);
+    if (!$input) {
+        json_response(['success' => false, 'error' => 'Invalid request body'], 400);
+    }
+    
+    if (!isset($input['order_id'])) {
+        json_response(['success' => false, 'error' => 'Order ID is required'], 400);
+    }
+    
+    $orderId = (int)$input['order_id'];
+    $parkReason = $input['reason'] ?? '';
+    $parkLabel = $input['label'] ?? null;
+    
+    // Get database connection
     $pdo = db();
     $pdo->beginTransaction();
     
-    // Get order
+    // Get order with lock
     $stmt = $pdo->prepare("
         SELECT * FROM orders 
         WHERE id = :order_id 
@@ -66,73 +101,124 @@ try {
         json_response(['success' => false, 'error' => 'Cannot park ' . $order['status'] . ' orders'], 400);
     }
     
+    if ($order['parked'] == 1) {
+        json_response(['success' => false, 'error' => 'Order is already parked'], 400);
+    }
+    
+    // Generate park label if not provided
+    if (!$parkLabel) {
+        $parkLabel = sprintf('Parked Order #%s - %s', 
+            $order['receipt_reference'],
+            date('H:i')
+        );
+    }
+    
     // Park the order
     $stmt = $pdo->prepare("
         UPDATE orders 
-        SET status = 'held',
-            parked = 1,
+        SET parked = 1,
             parked_at = NOW(),
-            parked_by = :user_id,
-            park_label = :label,
-            park_reason = :reason,
+            park_label = :park_label,
+            status = 'held',
             updated_at = NOW()
         WHERE id = :order_id
     ");
+    
     $stmt->execute([
-        'user_id' => $userId,
-        'label' => $parkLabel,
-        'reason' => $parkReason,
+        'park_label' => $parkLabel,
         'order_id' => $orderId
     ]);
     
-    // Free the table if dine-in
+    // If it's a dine-in order, free up the table
     if ($order['order_type'] === 'dine_in' && $order['table_id']) {
         $stmt = $pdo->prepare("
             UPDATE dining_tables 
-            SET is_occupied = 0 
+            SET status = 'available',
+                current_order_id = NULL,
+                updated_at = NOW()
             WHERE id = :table_id
+            AND tenant_id = :tenant_id
         ");
-        $stmt->execute(['table_id' => $order['table_id']]);
+        $stmt->execute([
+            'table_id' => $order['table_id'],
+            'tenant_id' => $tenantId
+        ]);
     }
     
-    // Log park event
+    // Log the parking action
     $stmt = $pdo->prepare("
-        INSERT INTO order_item_events (
-            tenant_id, order_id, event_type, payload, created_by, created_at
+        INSERT INTO order_logs (
+            order_id, tenant_id, branch_id, user_id,
+            action, details, created_at
         ) VALUES (
-            :tenant_id, :order_id, 'park', :payload, :user_id, NOW()
+            :order_id, :tenant_id, :branch_id, :user_id,
+            'parked', :details, NOW()
         )
     ");
+    
     $stmt->execute([
-        'tenant_id' => $tenantId,
         'order_id' => $orderId,
-        'payload' => json_encode([
-            'label' => $parkLabel,
-            'reason' => $parkReason
-        ]),
-        'user_id' => $userId
+        'tenant_id' => $tenantId,
+        'branch_id' => $branchId,
+        'user_id' => $userId,
+        'details' => json_encode([
+            'park_label' => $parkLabel,
+            'reason' => $parkReason,
+            'table_freed' => $order['table_id'] ? true : false
+        ])
     ]);
+    
+    // Create a parking record for history
+    $stmt = $pdo->prepare("
+        INSERT INTO order_park_history (
+            order_id, tenant_id, branch_id, 
+            parked_by, park_reason, park_label,
+            parked_at
+        ) VALUES (
+            :order_id, :tenant_id, :branch_id,
+            :parked_by, :park_reason, :park_label,
+            NOW()
+        )
+    ");
+    
+    try {
+        $stmt->execute([
+            'order_id' => $orderId,
+            'tenant_id' => $tenantId,
+            'branch_id' => $branchId,
+            'parked_by' => $userId,
+            'park_reason' => $parkReason,
+            'park_label' => $parkLabel
+        ]);
+    } catch (PDOException $e) {
+        // Table might not exist yet, ignore
+    }
     
     $pdo->commit();
     
     json_response([
         'success' => true,
-        'order_id' => $orderId,
-        'parked' => true,
-        'label' => $parkLabel
+        'message' => 'Order parked successfully',
+        'order' => [
+            'id' => $orderId,
+            'receipt_reference' => $order['receipt_reference'],
+            'park_label' => $parkLabel,
+            'parked_at' => date('Y-m-d H:i:s'),
+            'status' => 'held',
+            'table_freed' => $order['table_id'] ? true : false
+        ]
     ]);
     
+} catch (PDOException $e) {
+    if (isset($pdo) && $pdo->inTransaction()) {
+        $pdo->rollBack();
+    }
+    error_log('Park order DB error: ' . $e->getMessage());
+    json_response(['success' => false, 'error' => 'Database error'], 500);
 } catch (Exception $e) {
     if (isset($pdo) && $pdo->inTransaction()) {
         $pdo->rollBack();
     }
     error_log('Park order error: ' . $e->getMessage());
-    json_response(['success' => false, 'error' => 'Failed to park order'], 500);
-}
-
-function json_response($data, $statusCode = 200) {
-    http_response_code($statusCode);
-    header('Content-Type: application/json');
-    echo json_encode($data);
-    exit;
+    json_response(['success' => false, 'error' => $e->getMessage()], 500);
 }
