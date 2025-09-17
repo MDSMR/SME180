@@ -4,49 +4,78 @@
  * Path: /public_html/pos/api/order/update.php
  * 
  * Updates existing orders - add/remove items, modify quantities, update customer info
- * Handles fired items restrictions and approval workflows
  */
 
 declare(strict_types=1);
+error_reporting(E_ALL);
+ini_set('display_errors', '0');
 
+header('Content-Type: application/json; charset=utf-8');
+header('Access-Control-Allow-Origin: *');
+header('Access-Control-Allow-Methods: POST, OPTIONS');
+header('Access-Control-Allow-Headers: Content-Type, Authorization');
+
+if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
+    http_response_code(200);
+    exit;
+}
+
+// Include required files
 require_once __DIR__ . '/../../../config/db.php';
 require_once __DIR__ . '/../../../middleware/pos_auth.php';
 
-// Authentication check
-pos_auth_require_login();
-$user = pos_get_current_user();
-
-// Get tenant and branch from session
-$tenantId = (int)($_SESSION['tenant_id'] ?? 0);
-$branchId = (int)($_SESSION['branch_id'] ?? 0);
-$userId = (int)($_SESSION['user_id'] ?? 0);
-
-if (!$tenantId || !$branchId || !$userId) {
-    json_response(['success' => false, 'error' => 'Invalid session'], 401);
+// Start session if not started
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
 }
 
-// Parse request
-$input = json_decode(file_get_contents('php://input'), true);
-if (!$input) {
-    json_response(['success' => false, 'error' => 'Invalid request body'], 400);
+// Helper function for JSON responses
+function json_response($data, $code = 200) {
+    http_response_code($code);
+    echo json_encode($data, JSON_UNESCAPED_UNICODE);
+    exit;
 }
-
-// Validate required fields
-if (!isset($input['order_id'])) {
-    json_response(['success' => false, 'error' => 'Order ID is required'], 400);
-}
-
-$orderId = (int)$input['order_id'];
-$updateType = $input['update_type'] ?? 'items'; // items, customer, notes, table
 
 try {
+    // Authentication check
+    pos_auth_require_login();
+    $user = pos_get_current_user();
+    
+    if (!$user) {
+        json_response(['success' => false, 'error' => 'Not authenticated'], 401);
+    }
+    
+    // Get tenant and branch from session
+    $tenantId = (int)($_SESSION['tenant_id'] ?? 0);
+    $branchId = (int)($_SESSION['branch_id'] ?? 0);
+    $userId = (int)($_SESSION['user_id'] ?? 0);
+    
+    if (!$tenantId || !$branchId || !$userId) {
+        json_response(['success' => false, 'error' => 'Invalid session'], 401);
+    }
+    
+    // Parse request
+    $input = json_decode(file_get_contents('php://input'), true);
+    if (!$input) {
+        json_response(['success' => false, 'error' => 'Invalid request body'], 400);
+    }
+    
+    // Validate required fields
+    if (!isset($input['order_id'])) {
+        json_response(['success' => false, 'error' => 'Order ID is required'], 400);
+    }
+    
+    $orderId = (int)$input['order_id'];
+    $updateType = $input['update_type'] ?? 'add_items'; // add_items, remove_items, update_quantity, update_customer
+    
+    // Get database connection
     $pdo = db();
     $pdo->beginTransaction();
     
     // Fetch existing order
     $stmt = $pdo->prepare("
         SELECT o.*, 
-               (SELECT COUNT(*) FROM order_items WHERE order_id = o.id AND fire_status = 'fired') as fired_items_count
+               (SELECT COUNT(*) FROM order_items WHERE order_id = o.id AND kitchen_status != 'pending') as fired_items_count
         FROM orders o
         WHERE o.id = :order_id 
         AND o.tenant_id = :tenant_id
@@ -73,35 +102,222 @@ try {
         json_response(['success' => false, 'error' => 'Cannot modify paid orders'], 400);
     }
     
-    $response = ['success' => true, 'order_id' => $orderId];
+    // Get tax rate for calculations
+    $stmt = $pdo->prepare("
+        SELECT value FROM settings 
+        WHERE tenant_id = :tenant_id 
+        AND `key` = 'pos_tax_rate' 
+        LIMIT 1
+    ");
+    $stmt->execute(['tenant_id' => $tenantId]);
+    $taxRate = (float)($stmt->fetchColumn() ?: 0);
+    
+    $updateResult = [];
     
     switch ($updateType) {
-        case 'items':
-            $response = handleItemsUpdate($pdo, $order, $input, $userId, $tenantId, $branchId);
-            break;
-            
-        case 'customer':
-            $response = handleCustomerUpdate($pdo, $orderId, $input);
-            break;
-            
-        case 'notes':
-            $response = handleNotesUpdate($pdo, $orderId, $input);
-            break;
-            
-        case 'table':
-            $response = handleTableUpdate($pdo, $order, $input, $tenantId, $branchId);
-            break;
-            
         case 'add_items':
-            $response = handleAddItems($pdo, $order, $input, $userId, $tenantId);
+            if (empty($input['items'])) {
+                json_response(['success' => false, 'error' => 'No items to add'], 400);
+            }
+            
+            $stmt = $pdo->prepare("
+                INSERT INTO order_items (
+                    order_id, tenant_id, branch_id,
+                    product_id, product_name, quantity, unit_price,
+                    subtotal, tax_amount, total_amount,
+                    notes, kitchen_status, created_at
+                ) VALUES (
+                    :order_id, :tenant_id, :branch_id,
+                    :product_id, :product_name, :quantity, :unit_price,
+                    :subtotal, :tax_amount, :total_amount,
+                    :notes, 'pending', NOW()
+                )
+            ");
+            
+            $addedItems = [];
+            foreach ($input['items'] as $item) {
+                $productId = isset($item['product_id']) ? (int)$item['product_id'] : null;
+                $productName = $item['product_name'] ?? 'Unknown Item';
+                $quantity = (float)($item['quantity'] ?? 1);
+                $unitPrice = (float)($item['unit_price'] ?? 0);
+                $itemSubtotal = $quantity * $unitPrice;
+                $itemTax = $taxRate > 0 ? ($itemSubtotal * $taxRate / 100) : 0;
+                $itemTotal = $itemSubtotal + $itemTax;
+                
+                $stmt->execute([
+                    'order_id' => $orderId,
+                    'tenant_id' => $tenantId,
+                    'branch_id' => $branchId,
+                    'product_id' => $productId,
+                    'product_name' => $productName,
+                    'quantity' => $quantity,
+                    'unit_price' => $unitPrice,
+                    'subtotal' => $itemSubtotal,
+                    'tax_amount' => $itemTax,
+                    'total_amount' => $itemTotal,
+                    'notes' => $item['notes'] ?? ''
+                ]);
+                
+                $addedItems[] = [
+                    'id' => (int)$pdo->lastInsertId(),
+                    'product_name' => $productName,
+                    'quantity' => $quantity,
+                    'total' => $itemTotal
+                ];
+            }
+            $updateResult['added_items'] = $addedItems;
             break;
             
         case 'remove_items':
-            $response = handleRemoveItems($pdo, $order, $input, $userId);
+            if (empty($input['item_ids'])) {
+                json_response(['success' => false, 'error' => 'No items to remove'], 400);
+            }
+            
+            // Check if items can be removed (not fired)
+            $itemIds = array_map('intval', $input['item_ids']);
+            $placeholders = str_repeat('?,', count($itemIds) - 1) . '?';
+            
+            $stmt = $pdo->prepare("
+                SELECT id, product_name, kitchen_status 
+                FROM order_items 
+                WHERE id IN ($placeholders) 
+                AND order_id = ? 
+                AND is_voided = 0
+            ");
+            $params = array_merge($itemIds, [$orderId]);
+            $stmt->execute($params);
+            $items = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            
+            $firedItems = array_filter($items, function($item) {
+                return $item['kitchen_status'] !== 'pending';
+            });
+            
+            if (!empty($firedItems)) {
+                // Need manager approval for fired items
+                $requiresApproval = true;
+                $managerPin = $input['manager_pin'] ?? '';
+                
+                if (!$managerPin) {
+                    json_response([
+                        'success' => false, 
+                        'error' => 'Manager approval required to remove fired items',
+                        'requires_approval' => true,
+                        'fired_items' => array_column($firedItems, 'product_name')
+                    ], 403);
+                }
+                
+                // Validate manager PIN
+                $stmt = $pdo->prepare("
+                    SELECT id FROM users 
+                    WHERE tenant_id = :tenant_id 
+                    AND pin = :pin 
+                    AND role IN ('admin', 'manager')
+                    AND is_active = 1
+                    LIMIT 1
+                ");
+                $stmt->execute([
+                    'tenant_id' => $tenantId,
+                    'pin' => hash('sha256', $managerPin)
+                ]);
+                
+                if (!$stmt->fetchColumn()) {
+                    json_response(['success' => false, 'error' => 'Invalid manager PIN'], 403);
+                }
+            }
+            
+            // Void the items instead of deleting
+            $stmt = $pdo->prepare("
+                UPDATE order_items 
+                SET is_voided = 1, 
+                    voided_at = NOW(), 
+                    voided_by = :user_id,
+                    void_reason = :reason
+                WHERE id IN ($placeholders) 
+                AND order_id = ?
+            ");
+            
+            $reason = $input['reason'] ?? 'Item removed from order';
+            $params = array_merge([$userId, $reason], $itemIds, [$orderId]);
+            $stmt->execute($params);
+            
+            $updateResult['removed_items'] = count($itemIds);
             break;
             
         case 'update_quantity':
-            $response = handleQuantityUpdate($pdo, $order, $input, $userId);
+            $itemId = (int)($input['item_id'] ?? 0);
+            $newQuantity = (float)($input['quantity'] ?? 0);
+            
+            if (!$itemId || $newQuantity <= 0) {
+                json_response(['success' => false, 'error' => 'Invalid item or quantity'], 400);
+            }
+            
+            // Get current item
+            $stmt = $pdo->prepare("
+                SELECT * FROM order_items 
+                WHERE id = :item_id 
+                AND order_id = :order_id 
+                AND is_voided = 0
+            ");
+            $stmt->execute([
+                'item_id' => $itemId,
+                'order_id' => $orderId
+            ]);
+            $item = $stmt->fetch(PDO::FETCH_ASSOC);
+            
+            if (!$item) {
+                json_response(['success' => false, 'error' => 'Item not found'], 404);
+            }
+            
+            // Check if item is fired
+            if ($item['kitchen_status'] !== 'pending') {
+                json_response(['success' => false, 'error' => 'Cannot modify quantity of fired items'], 400);
+            }
+            
+            // Update quantity and recalculate
+            $newSubtotal = $newQuantity * $item['unit_price'];
+            $newTax = $taxRate > 0 ? ($newSubtotal * $taxRate / 100) : 0;
+            $newTotal = $newSubtotal + $newTax;
+            
+            $stmt = $pdo->prepare("
+                UPDATE order_items 
+                SET quantity = :quantity,
+                    subtotal = :subtotal,
+                    tax_amount = :tax_amount,
+                    total_amount = :total_amount
+                WHERE id = :item_id
+            ");
+            $stmt->execute([
+                'quantity' => $newQuantity,
+                'subtotal' => $newSubtotal,
+                'tax_amount' => $newTax,
+                'total_amount' => $newTotal,
+                'item_id' => $itemId
+            ]);
+            
+            $updateResult['updated_item'] = [
+                'id' => $itemId,
+                'new_quantity' => $newQuantity,
+                'new_total' => $newTotal
+            ];
+            break;
+            
+        case 'update_customer':
+            $stmt = $pdo->prepare("
+                UPDATE orders 
+                SET customer_name = :customer_name,
+                    customer_phone = :customer_phone,
+                    customer_id = :customer_id,
+                    updated_at = NOW()
+                WHERE id = :order_id
+            ");
+            $stmt->execute([
+                'customer_name' => $input['customer_name'] ?? $order['customer_name'],
+                'customer_phone' => $input['customer_phone'] ?? $order['customer_phone'],
+                'customer_id' => isset($input['customer_id']) ? (int)$input['customer_id'] : $order['customer_id'],
+                'order_id' => $orderId
+            ]);
+            
+            $updateResult['customer_updated'] = true;
             break;
             
         default:
@@ -109,570 +325,106 @@ try {
     }
     
     // Recalculate order totals
-    recalculateOrderTotals($pdo, $orderId, $tenantId);
-    
-    // Log update event
-    $stmt = $pdo->prepare("
-        INSERT INTO order_item_events (
-            tenant_id, order_id, event_type, payload, created_by, created_at
-        ) VALUES (
-            :tenant_id, :order_id, :event_type, :payload, :user_id, NOW()
-        )
-    ");
-    $stmt->execute([
-        'tenant_id' => $tenantId,
-        'order_id' => $orderId,
-        'event_type' => 'update',
-        'payload' => json_encode([
-            'update_type' => $updateType,
-            'changes' => $input
-        ]),
-        'user_id' => $userId
-    ]);
-    
-    $pdo->commit();
-    
-    // Fetch updated order details
-    $stmt = $pdo->prepare("
-        SELECT o.*, 
-               COUNT(DISTINCT oi.id) as items_count,
-               SUM(oi.quantity) as total_quantity
-        FROM orders o
-        LEFT JOIN order_items oi ON oi.order_id = o.id AND oi.is_voided = 0
-        WHERE o.id = :order_id
-        GROUP BY o.id
-    ");
-    $stmt->execute(['order_id' => $orderId]);
-    $updatedOrder = $stmt->fetch(PDO::FETCH_ASSOC);
-    
-    $response['order'] = [
-        'id' => $orderId,
-        'status' => $updatedOrder['status'],
-        'payment_status' => $updatedOrder['payment_status'],
-        'subtotal' => round((float)$updatedOrder['subtotal_amount'], 2),
-        'discount' => round((float)$updatedOrder['discount_amount'], 2),
-        'service_charge' => round((float)$updatedOrder['service_charge_amount'], 2),
-        'tax' => round((float)$updatedOrder['tax_amount'], 2),
-        'total' => round((float)$updatedOrder['total_amount'], 2),
-        'items_count' => (int)$updatedOrder['items_count'],
-        'total_quantity' => (int)$updatedOrder['total_quantity']
-    ];
-    
-    json_response($response);
-    
-} catch (Exception $e) {
-    if (isset($pdo) && $pdo->inTransaction()) {
-        $pdo->rollBack();
-    }
-    
-    error_log('Order update error: ' . $e->getMessage());
-    json_response([
-        'success' => false,
-        'error' => 'Failed to update order',
-        'details' => $e->getMessage()
-    ], 500);
-}
-
-/**
- * Handle adding new items to order
- */
-function handleAddItems($pdo, $order, $input, $userId, $tenantId) {
-    if (!isset($input['items']) || !is_array($input['items'])) {
-        return ['success' => false, 'error' => 'Items array is required'];
-    }
-    
-    $orderId = $order['id'];
-    $addedItems = [];
-    
-    $itemStmt = $pdo->prepare("
-        INSERT INTO order_items (
-            order_id, product_id, product_name, unit_price, quantity,
-            line_subtotal, discount_amount, line_total,
-            notes, kitchen_notes, state, fire_status,
-            created_at
-        ) VALUES (
-            :order_id, :product_id, :product_name, :unit_price, :quantity,
-            :line_subtotal, :discount_amount, :line_total,
-            :notes, :kitchen_notes, 'held', 'pending',
-            NOW()
-        )
-    ");
-    
-    foreach ($input['items'] as $item) {
-        // Validate product
-        $stmt = $pdo->prepare("
-            SELECT id, name, price 
-            FROM products 
-            WHERE id = :id 
-            AND tenant_id = :tenant_id 
-            AND is_active = 1
-        ");
-        $stmt->execute([
-            'id' => $item['product_id'],
-            'tenant_id' => $tenantId
-        ]);
-        $product = $stmt->fetch(PDO::FETCH_ASSOC);
-        
-        if (!$product) {
-            continue;
-        }
-        
-        $quantity = max(1, (int)($item['quantity'] ?? 1));
-        $unitPrice = (float)$product['price'];
-        $lineSubtotal = $unitPrice * $quantity;
-        $discountAmount = (float)($item['discount_amount'] ?? 0);
-        $lineTotal = $lineSubtotal - $discountAmount;
-        
-        $itemStmt->execute([
-            'order_id' => $orderId,
-            'product_id' => $product['id'],
-            'product_name' => $product['name'],
-            'unit_price' => $unitPrice,
-            'quantity' => $quantity,
-            'line_subtotal' => $lineSubtotal,
-            'discount_amount' => $discountAmount,
-            'line_total' => $lineTotal,
-            'notes' => $item['notes'] ?? '',
-            'kitchen_notes' => $item['kitchen_notes'] ?? ''
-        ]);
-        
-        $addedItems[] = [
-            'id' => $pdo->lastInsertId(),
-            'product_id' => $product['id'],
-            'product_name' => $product['name'],
-            'quantity' => $quantity,
-            'unit_price' => $unitPrice,
-            'line_total' => $lineTotal
-        ];
-    }
-    
-    return [
-        'success' => true,
-        'added_items' => $addedItems,
-        'items_count' => count($addedItems)
-    ];
-}
-
-/**
- * Handle removing items from order
- */
-function handleRemoveItems($pdo, $order, $input, $userId) {
-    if (!isset($input['item_ids']) || !is_array($input['item_ids'])) {
-        return ['success' => false, 'error' => 'Item IDs array is required'];
-    }
-    
-    $orderId = $order['id'];
-    $removedCount = 0;
-    $requiresApproval = [];
-    
-    foreach ($input['item_ids'] as $itemId) {
-        // Check if item exists and its status
-        $stmt = $pdo->prepare("
-            SELECT id, fire_status, state, product_name
-            FROM order_items 
-            WHERE id = :item_id 
-            AND order_id = :order_id
-            AND is_voided = 0
-        ");
-        $stmt->execute([
-            'item_id' => $itemId,
-            'order_id' => $orderId
-        ]);
-        $item = $stmt->fetch(PDO::FETCH_ASSOC);
-        
-        if (!$item) {
-            continue;
-        }
-        
-        // If item is already fired, requires approval to void
-        if ($item['fire_status'] === 'fired' || $item['state'] === 'fired') {
-            $requiresApproval[] = [
-                'item_id' => $item['id'],
-                'product_name' => $item['product_name'],
-                'reason' => 'Item already sent to kitchen'
-            ];
-            continue;
-        }
-        
-        // Soft delete the item
-        $stmt = $pdo->prepare("
-            UPDATE order_items 
-            SET is_voided = 1,
-                void_reason = :reason,
-                void_at = NOW(),
-                void_approved_by = :user_id
-            WHERE id = :item_id
-        ");
-        $stmt->execute([
-            'reason' => $input['reason'] ?? 'Removed by staff',
-            'user_id' => $userId,
-            'item_id' => $itemId
-        ]);
-        
-        $removedCount++;
-    }
-    
-    $response = [
-        'success' => true,
-        'removed_count' => $removedCount
-    ];
-    
-    if (!empty($requiresApproval)) {
-        $response['requires_approval'] = $requiresApproval;
-    }
-    
-    return $response;
-}
-
-/**
- * Handle quantity updates
- */
-function handleQuantityUpdate($pdo, $order, $input, $userId) {
-    if (!isset($input['item_id']) || !isset($input['quantity'])) {
-        return ['success' => false, 'error' => 'Item ID and quantity are required'];
-    }
-    
-    $itemId = (int)$input['item_id'];
-    $newQuantity = (int)$input['quantity'];
-    
-    if ($newQuantity <= 0) {
-        return ['success' => false, 'error' => 'Quantity must be greater than 0'];
-    }
-    
-    // Check if item exists and can be modified
-    $stmt = $pdo->prepare("
-        SELECT * FROM order_items 
-        WHERE id = :item_id 
-        AND order_id = :order_id
-        AND is_voided = 0
-    ");
-    $stmt->execute([
-        'item_id' => $itemId,
-        'order_id' => $order['id']
-    ]);
-    $item = $stmt->fetch(PDO::FETCH_ASSOC);
-    
-    if (!$item) {
-        return ['success' => false, 'error' => 'Item not found'];
-    }
-    
-    // If item is fired, check if reducing quantity
-    if ($item['fire_status'] === 'fired' && $newQuantity < $item['quantity']) {
-        // Requires approval to reduce fired items
-        $hasPermission = check_user_permission($pdo, $userId, 'pos.modify_fired');
-        if (!$hasPermission) {
-            return [
-                'success' => false,
-                'error' => 'Permission required to reduce fired items',
-                'requires_approval' => true
-            ];
-        }
-    }
-    
-    // Update quantity and recalculate
-    $unitPrice = (float)$item['unit_price'];
-    $lineSubtotal = $unitPrice * $newQuantity;
-    $discountAmount = (float)$item['discount_amount'];
-    $lineTotal = $lineSubtotal - $discountAmount;
-    
-    $stmt = $pdo->prepare("
-        UPDATE order_items 
-        SET quantity = :quantity,
-            line_subtotal = :line_subtotal,
-            line_total = :line_total,
-            updated_at = NOW()
-        WHERE id = :item_id
-    ");
-    $stmt->execute([
-        'quantity' => $newQuantity,
-        'line_subtotal' => $lineSubtotal,
-        'line_total' => $lineTotal,
-        'item_id' => $itemId
-    ]);
-    
-    return [
-        'success' => true,
-        'item_id' => $itemId,
-        'old_quantity' => $item['quantity'],
-        'new_quantity' => $newQuantity,
-        'new_line_total' => $lineTotal
-    ];
-}
-
-/**
- * Handle customer information update
- */
-function handleCustomerUpdate($pdo, $orderId, $input) {
-    $updates = [];
-    $params = ['order_id' => $orderId];
-    
-    if (isset($input['customer_id'])) {
-        $updates[] = 'customer_id = :customer_id';
-        $params['customer_id'] = $input['customer_id'];
-    }
-    
-    if (isset($input['customer_name'])) {
-        $updates[] = 'customer_name = :customer_name';
-        $params['customer_name'] = $input['customer_name'];
-    }
-    
-    if (isset($input['guest_count'])) {
-        $updates[] = 'guest_count = :guest_count';
-        $params['guest_count'] = max(1, (int)$input['guest_count']);
-    }
-    
-    if (empty($updates)) {
-        return ['success' => false, 'error' => 'No customer updates provided'];
-    }
-    
-    $sql = "UPDATE orders SET " . implode(', ', $updates) . ", updated_at = NOW() WHERE id = :order_id";
-    $stmt = $pdo->prepare($sql);
-    $stmt->execute($params);
-    
-    return ['success' => true, 'updated_fields' => array_keys($params)];
-}
-
-/**
- * Handle notes update
- */
-function handleNotesUpdate($pdo, $orderId, $input) {
-    if (!isset($input['notes']) && !isset($input['kitchen_notes'])) {
-        return ['success' => false, 'error' => 'No notes provided'];
-    }
-    
-    $updates = [];
-    $params = ['order_id' => $orderId];
-    
-    if (isset($input['notes'])) {
-        $updates[] = 'order_notes = :notes';
-        $params['notes'] = $input['notes'];
-    }
-    
-    if (isset($input['kitchen_notes'])) {
-        // Update kitchen notes for all items if provided
-        $stmt = $pdo->prepare("
-            UPDATE order_items 
-            SET kitchen_notes = :kitchen_notes 
-            WHERE order_id = :order_id
-        ");
-        $stmt->execute([
-            'kitchen_notes' => $input['kitchen_notes'],
-            'order_id' => $orderId
-        ]);
-    }
-    
-    if (!empty($updates)) {
-        $sql = "UPDATE orders SET " . implode(', ', $updates) . ", updated_at = NOW() WHERE id = :order_id";
-        $stmt = $pdo->prepare($sql);
-        $stmt->execute($params);
-    }
-    
-    return ['success' => true];
-}
-
-/**
- * Handle table change
- */
-function handleTableUpdate($pdo, $order, $input, $tenantId, $branchId) {
-    if (!isset($input['table_id'])) {
-        return ['success' => false, 'error' => 'Table ID is required'];
-    }
-    
-    $newTableId = (int)$input['table_id'];
-    $oldTableId = $order['table_id'];
-    
-    if ($newTableId === $oldTableId) {
-        return ['success' => true, 'message' => 'Same table, no change needed'];
-    }
-    
-    // Validate new table
-    $stmt = $pdo->prepare("
-        SELECT id, is_occupied 
-        FROM dining_tables 
-        WHERE id = :id 
-        AND tenant_id = :tenant_id 
-        AND branch_id = :branch_id
-        AND is_active = 1
-    ");
-    $stmt->execute([
-        'id' => $newTableId,
-        'tenant_id' => $tenantId,
-        'branch_id' => $branchId
-    ]);
-    $newTable = $stmt->fetch(PDO::FETCH_ASSOC);
-    
-    if (!$newTable) {
-        return ['success' => false, 'error' => 'Invalid table'];
-    }
-    
-    if ($newTable['is_occupied']) {
-        return ['success' => false, 'error' => 'Table is already occupied'];
-    }
-    
-    // Update order
-    $stmt = $pdo->prepare("
-        UPDATE orders 
-        SET table_id = :table_id, updated_at = NOW() 
-        WHERE id = :order_id
-    ");
-    $stmt->execute([
-        'table_id' => $newTableId,
-        'order_id' => $order['id']
-    ]);
-    
-    // Update table statuses
-    if ($oldTableId) {
-        $stmt = $pdo->prepare("
-            UPDATE dining_tables 
-            SET is_occupied = 0 
-            WHERE id = :id
-        ");
-        $stmt->execute(['id' => $oldTableId]);
-    }
-    
-    $stmt = $pdo->prepare("
-        UPDATE dining_tables 
-        SET is_occupied = 1, last_occupied_at = NOW() 
-        WHERE id = :id
-    ");
-    $stmt->execute(['id' => $newTableId]);
-    
-    return [
-        'success' => true,
-        'old_table_id' => $oldTableId,
-        'new_table_id' => $newTableId
-    ];
-}
-
-/**
- * Recalculate order totals
- */
-function recalculateOrderTotals($pdo, $orderId, $tenantId) {
-    // Get settings
-    $stmt = $pdo->prepare("
-        SELECT `key`, `value` 
-        FROM settings 
-        WHERE tenant_id = :tenant_id 
-        AND `key` IN ('tax_rate', 'tax_type', 'pos_service_charge_percent')
-    ");
-    $stmt->execute(['tenant_id' => $tenantId]);
-    $settings = [];
-    while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
-        $settings[$row['key']] = $row['value'];
-    }
-    
-    $taxRate = (float)($settings['tax_rate'] ?? 0);
-    $taxType = $settings['tax_type'] ?? 'exclusive';
-    $serviceChargePercent = (float)($settings['pos_service_charge_percent'] ?? 0);
-    
-    // Calculate new totals from items
     $stmt = $pdo->prepare("
         SELECT 
-            SUM(line_subtotal) as subtotal,
-            SUM(discount_amount) as discount,
-            SUM(line_total) as items_total
+            SUM(CASE WHEN is_voided = 0 THEN subtotal ELSE 0 END) as subtotal,
+            SUM(CASE WHEN is_voided = 0 THEN tax_amount ELSE 0 END) as tax_amount,
+            SUM(CASE WHEN is_voided = 0 THEN total_amount ELSE 0 END) as total_amount
         FROM order_items 
-        WHERE order_id = :order_id 
-        AND is_voided = 0
+        WHERE order_id = :order_id
     ");
     $stmt->execute(['order_id' => $orderId]);
     $totals = $stmt->fetch(PDO::FETCH_ASSOC);
     
-    $subtotal = (float)($totals['subtotal'] ?? 0);
-    $itemsDiscount = (float)($totals['discount'] ?? 0);
+    // Update order totals
+    $serviceCharge = $order['service_charge']; // Keep existing service charge
+    $newTotal = $totals['total_amount'] + $serviceCharge;
     
-    // Get order-level discount
-    $stmt = $pdo->prepare("
-        SELECT discount_amount, service_charge_amount, order_type 
-        FROM orders 
-        WHERE id = :order_id
-    ");
-    $stmt->execute(['order_id' => $orderId]);
-    $order = $stmt->fetch(PDO::FETCH_ASSOC);
-    
-    $orderDiscount = (float)($order['discount_amount'] ?? 0) - $itemsDiscount;
-    $totalDiscount = $itemsDiscount + $orderDiscount;
-    
-    // Calculate service charge
-    $serviceChargeAmount = 0;
-    if ($order['order_type'] === 'dine_in' && $serviceChargePercent > 0) {
-        $serviceChargeAmount = ($subtotal - $totalDiscount) * ($serviceChargePercent / 100);
-    }
-    
-    // Calculate tax
-    $taxableAmount = $subtotal - $totalDiscount + $serviceChargeAmount;
-    $taxAmount = 0;
-    
-    if ($taxRate > 0) {
-        if ($taxType === 'inclusive') {
-            $taxAmount = $taxableAmount - ($taxableAmount / (1 + $taxRate / 100));
-        } else {
-            $taxAmount = $taxableAmount * ($taxRate / 100);
-        }
-    }
-    
-    // Calculate final total
-    $totalAmount = $subtotal - $totalDiscount + $serviceChargeAmount;
-    if ($taxType === 'exclusive') {
-        $totalAmount += $taxAmount;
-    }
-    
-    // Update order
     $stmt = $pdo->prepare("
         UPDATE orders 
-        SET subtotal_amount = :subtotal,
-            discount_amount = :discount,
-            service_charge_amount = :service_charge,
-            tax_amount = :tax,
-            total_amount = :total,
+        SET subtotal = :subtotal,
+            tax_amount = :tax_amount,
+            total_amount = :total_amount,
             updated_at = NOW()
         WHERE id = :order_id
     ");
     $stmt->execute([
-        'subtotal' => $subtotal,
-        'discount' => $totalDiscount,
-        'service_charge' => $serviceChargeAmount,
-        'tax' => $taxAmount,
-        'total' => $totalAmount,
+        'subtotal' => $totals['subtotal'],
+        'tax_amount' => $totals['tax_amount'],
+        'total_amount' => $newTotal,
         'order_id' => $orderId
     ]);
-}
-
-/**
- * Handle full items replacement
- */
-function handleItemsUpdate($pdo, $order, $input, $userId, $tenantId, $branchId) {
-    // This would replace all items - used for major order modifications
-    // Implementation would be similar to handleAddItems but would first void all existing items
-    return ['success' => true, 'message' => 'Items update completed'];
-}
-
-/**
- * Check if user has specific permission
- */
-function check_user_permission($pdo, $userId, $capability) {
+    
+    // Log the update
     $stmt = $pdo->prepare("
-        SELECT COUNT(*) as has_permission
-        FROM users u
-        JOIN pos_role_capabilities rc ON rc.role_key = u.role_key
-        WHERE u.id = :user_id
-        AND rc.capability_key = :capability
+        INSERT INTO order_logs (
+            order_id, tenant_id, branch_id, user_id,
+            action, details, created_at
+        ) VALUES (
+            :order_id, :tenant_id, :branch_id, :user_id,
+            :action, :details, NOW()
+        )
     ");
+    
     $stmt->execute([
+        'order_id' => $orderId,
+        'tenant_id' => $tenantId,
+        'branch_id' => $branchId,
         'user_id' => $userId,
-        'capability' => $capability
+        'action' => 'updated',
+        'details' => json_encode([
+            'update_type' => $updateType,
+            'result' => $updateResult
+        ])
     ]);
-    $result = $stmt->fetch(PDO::FETCH_ASSOC);
-    return $result['has_permission'] > 0;
+    
+    $pdo->commit();
+    
+    // Get updated order
+    $stmt = $pdo->prepare("
+        SELECT * FROM orders 
+        WHERE id = :order_id
+    ");
+    $stmt->execute(['order_id' => $orderId]);
+    $updatedOrder = $stmt->fetch(PDO::FETCH_ASSOC);
+    
+    // Get updated items
+    $stmt = $pdo->prepare("
+        SELECT * FROM order_items 
+        WHERE order_id = :order_id 
+        AND is_voided = 0
+        ORDER BY created_at ASC
+    ");
+    $stmt->execute(['order_id' => $orderId]);
+    $items = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    
+    json_response([
+        'success' => true,
+        'message' => 'Order updated successfully',
+        'order' => [
+            'id' => $updatedOrder['id'],
+            'receipt_reference' => $updatedOrder['receipt_reference'],
+            'subtotal' => (float)$updatedOrder['subtotal'],
+            'tax_amount' => (float)$updatedOrder['tax_amount'],
+            'service_charge' => (float)$updatedOrder['service_charge'],
+            'total_amount' => (float)$updatedOrder['total_amount'],
+            'items_count' => count($items),
+            'status' => $updatedOrder['status']
+        ],
+        'update_result' => $updateResult,
+        'items' => $items
+    ]);
+    
+} catch (PDOException $e) {
+    if (isset($pdo) && $pdo->inTransaction()) {
+        $pdo->rollBack();
+    }
+    error_log('Order update DB error: ' . $e->getMessage());
+    json_response(['success' => false, 'error' => 'Database error'], 500);
+} catch (Exception $e) {
+    if (isset($pdo) && $pdo->inTransaction()) {
+        $pdo->rollBack();
+    }
+    error_log('Order update error: ' . $e->getMessage());
+    json_response(['success' => false, 'error' => $e->getMessage()], 500);
 }
-
-/**
- * Send JSON response
- */
-function json_response($data, $statusCode = 200) {
-    http_response_code($statusCode);
-    header('Content-Type: application/json');
-    echo json_encode($data);
-    exit;
-}
-?>
