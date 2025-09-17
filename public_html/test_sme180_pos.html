@@ -1,0 +1,1155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SME 180 POS - Complete System Test Suite</title>
+    <style>
+        :root {
+            --primary: #0078d4;
+            --success: #107c10;
+            --warning: #ff8c00;
+            --danger: #d13438;
+            --bg: #f5f5f5;
+            --card-bg: #ffffff;
+            --text: #323130;
+            --border: #e1e1e1;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            line-height: 1.6;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            border-radius: 12px;
+            margin-bottom: 30px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+        }
+
+        .header h1 {
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+        }
+
+        .header p {
+            font-size: 1.1rem;
+            opacity: 0.95;
+        }
+
+        .test-controls {
+            background: var(--card-bg);
+            padding: 25px;
+            border-radius: 8px;
+            margin-bottom: 30px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        }
+
+        .control-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .control-group {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .control-group label {
+            font-weight: 600;
+            margin-bottom: 5px;
+            color: #605e5c;
+            font-size: 0.9rem;
+        }
+
+        .control-group input, 
+        .control-group select {
+            padding: 8px 12px;
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            font-size: 14px;
+        }
+
+        .control-group input:focus,
+        .control-group select:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 2px rgba(0,120,212,0.1);
+        }
+
+        .button-group {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 6px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-size: 14px;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .btn-primary {
+            background: var(--primary);
+            color: white;
+        }
+
+        .btn-success {
+            background: var(--success);
+            color: white;
+        }
+
+        .btn-warning {
+            background: var(--warning);
+            color: white;
+        }
+
+        .btn-danger {
+            background: var(--danger);
+            color: white;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        }
+
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .phase-container {
+            margin-bottom: 30px;
+        }
+
+        .phase-header {
+            background: linear-gradient(to right, #4facfe 0%, #00f2fe 100%);
+            color: white;
+            padding: 15px 20px;
+            border-radius: 8px 8px 0 0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .phase-header h2 {
+            font-size: 1.3rem;
+        }
+
+        .phase-status {
+            padding: 5px 15px;
+            background: rgba(255,255,255,0.2);
+            border-radius: 20px;
+            font-size: 0.9rem;
+        }
+
+        .test-grid {
+            background: var(--card-bg);
+            border-radius: 0 0 8px 8px;
+            overflow: hidden;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+        }
+
+        .test-item {
+            padding: 15px 20px;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            transition: background 0.2s;
+        }
+
+        .test-item:hover {
+            background: #f8f8f8;
+        }
+
+        .test-item:last-child {
+            border-bottom: none;
+        }
+
+        .test-info {
+            flex: 1;
+        }
+
+        .test-name {
+            font-weight: 600;
+            margin-bottom: 3px;
+        }
+
+        .test-endpoint {
+            font-size: 0.85rem;
+            color: #8a8886;
+            font-family: 'Courier New', monospace;
+        }
+
+        .test-actions {
+            display: flex;
+            gap: 10px;
+        }
+
+        .test-status {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: #e1e1e1;
+        }
+
+        .test-status.success {
+            background: var(--success);
+            animation: pulse 2s infinite;
+        }
+
+        .test-status.error {
+            background: var(--danger);
+        }
+
+        .test-status.running {
+            background: var(--warning);
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes pulse {
+            0% { box-shadow: 0 0 0 0 rgba(16,124,16,0.4); }
+            70% { box-shadow: 0 0 0 10px rgba(16,124,16,0); }
+            100% { box-shadow: 0 0 0 0 rgba(16,124,16,0); }
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .results-panel {
+            background: var(--card-bg);
+            border-radius: 8px;
+            padding: 20px;
+            margin-top: 30px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+        }
+
+        .results-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 2px solid var(--border);
+        }
+
+        .results-header h3 {
+            font-size: 1.2rem;
+            color: var(--text);
+        }
+
+        .result-item {
+            background: #f8f8f8;
+            border-radius: 6px;
+            padding: 15px;
+            margin-bottom: 15px;
+            border-left: 4px solid var(--border);
+        }
+
+        .result-item.success {
+            border-left-color: var(--success);
+            background: #f0fdf4;
+        }
+
+        .result-item.error {
+            border-left-color: var(--danger);
+            background: #fef2f2;
+        }
+
+        .result-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+
+        .result-title {
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .result-time {
+            font-size: 0.85rem;
+            color: #8a8886;
+        }
+
+        .result-details {
+            background: white;
+            border-radius: 4px;
+            padding: 12px;
+            margin-top: 10px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.85rem;
+            overflow-x: auto;
+        }
+
+        .result-error {
+            color: var(--danger);
+            margin-top: 10px;
+            padding: 10px;
+            background: white;
+            border-radius: 4px;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 15px;
+            margin-bottom: 30px;
+        }
+
+        .stat-card {
+            background: var(--card-bg);
+            padding: 20px;
+            border-radius: 8px;
+            text-align: center;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        }
+
+        .stat-value {
+            font-size: 2rem;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+
+        .stat-label {
+            color: #8a8886;
+            font-size: 0.9rem;
+        }
+
+        .sql-section {
+            background: #1e1e1e;
+            color: #d4d4d4;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+
+        .sql-section h3 {
+            color: #4ec9b0;
+            margin-bottom: 15px;
+        }
+
+        .sql-code {
+            background: #2d2d2d;
+            padding: 15px;
+            border-radius: 4px;
+            overflow-x: auto;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9rem;
+            line-height: 1.5;
+        }
+
+        .copy-btn {
+            background: #4ec9b0;
+            color: white;
+            border: none;
+            padding: 5px 15px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.85rem;
+            margin-top: 10px;
+        }
+
+        .copy-btn:hover {
+            background: #3ea894;
+        }
+
+        .progress-bar {
+            background: var(--border);
+            height: 8px;
+            border-radius: 4px;
+            overflow: hidden;
+            margin-bottom: 20px;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+            transition: width 0.3s;
+        }
+
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.5);
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+
+        .modal.active {
+            display: flex;
+        }
+
+        .modal-content {
+            background: white;
+            border-radius: 12px;
+            padding: 30px;
+            max-width: 600px;
+            width: 90%;
+            max-height: 80vh;
+            overflow-y: auto;
+        }
+
+        .modal-header {
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 2px solid var(--border);
+        }
+
+        .modal-header h3 {
+            font-size: 1.5rem;
+            color: var(--text);
+        }
+
+        .json-viewer {
+            background: #f5f5f5;
+            padding: 15px;
+            border-radius: 8px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9rem;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+
+        .spinner {
+            border: 3px solid var(--border);
+            border-top: 3px solid var(--primary);
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 20px auto;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <div class="header">
+            <h1>🚀 SME 180 POS - Complete System Test Suite</h1>
+            <p>Test all Phase 1, 2, and 3 APIs with SQL validation</p>
+        </div>
+
+        <!-- Test Controls -->
+        <div class="test-controls">
+            <h3 style="margin-bottom: 20px;">Test Configuration</h3>
+            <div class="control-grid">
+                <div class="control-group">
+                    <label>Base URL</label>
+                    <input type="text" id="baseUrl" value="https://mohamedk10.sg-host.com/pos/api" />
+                </div>
+                <div class="control-group">
+                    <label>Tenant ID</label>
+                    <input type="number" id="tenantId" value="1" />
+                </div>
+                <div class="control-group">
+                    <label>Branch ID</label>
+                    <input type="number" id="branchId" value="1" />
+                </div>
+                <div class="control-group">
+                    <label>User PIN</label>
+                    <input type="text" id="userPin" value="1234" />
+                </div>
+                <div class="control-group">
+                    <label>Manager PIN</label>
+                    <input type="text" id="managerPin" value="5678" />
+                </div>
+                <div class="control-group">
+                    <label>Station Code</label>
+                    <input type="text" id="stationCode" value="POS1" />
+                </div>
+            </div>
+            
+            <div class="button-group">
+                <button class="btn btn-primary" onclick="testSQL()">
+                    <span>🗄️</span> Test SQL Updates
+                </button>
+                <button class="btn btn-success" onclick="runPhase1Tests()">
+                    <span>🔐</span> Test Phase 1
+                </button>
+                <button class="btn btn-success" onclick="runPhase2Tests()">
+                    <span>📝</span> Test Phase 2
+                </button>
+                <button class="btn btn-success" onclick="runPhase3Tests()">
+                    <span>👨‍🍳</span> Test Phase 3
+                </button>
+                <button class="btn btn-warning" onclick="runAllTests()">
+                    <span>⚡</span> Run All Tests
+                </button>
+                <button class="btn btn-danger" onclick="clearResults()">
+                    <span>🗑️</span> Clear Results
+                </button>
+            </div>
+        </div>
+
+        <!-- Stats -->
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-value" id="totalTests">0</div>
+                <div class="stat-label">Total Tests</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="passedTests" style="color: var(--success);">0</div>
+                <div class="stat-label">Passed</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="failedTests" style="color: var(--danger);">0</div>
+                <div class="stat-label">Failed</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="successRate">0%</div>
+                <div class="stat-label">Success Rate</div>
+            </div>
+        </div>
+
+        <!-- Progress Bar -->
+        <div class="progress-bar">
+            <div class="progress-fill" id="progressBar" style="width: 0%;"></div>
+        </div>
+
+        <!-- Phase 1 Tests -->
+        <div class="phase-container">
+            <div class="phase-header">
+                <h2>Phase 1: Authentication & Sessions</h2>
+                <span class="phase-status" id="phase1Status">Ready</span>
+            </div>
+            <div class="test-grid" id="phase1Tests">
+                <!-- Tests will be populated by JavaScript -->
+            </div>
+        </div>
+
+        <!-- Phase 2 Tests -->
+        <div class="phase-container">
+            <div class="phase-header">
+                <h2>Phase 2: Order Management</h2>
+                <span class="phase-status" id="phase2Status">Ready</span>
+            </div>
+            <div class="test-grid" id="phase2Tests">
+                <!-- Tests will be populated by JavaScript -->
+            </div>
+        </div>
+
+        <!-- Phase 3 Tests -->
+        <div class="phase-container">
+            <div class="phase-header">
+                <h2>Phase 3: Kitchen Display System</h2>
+                <span class="phase-status" id="phase3Status">Ready</span>
+            </div>
+            <div class="test-grid" id="phase3Tests">
+                <!-- Tests will be populated by JavaScript -->
+            </div>
+        </div>
+
+        <!-- SQL Tests -->
+        <div class="phase-container">
+            <div class="phase-header">
+                <h2>SQL Database Updates</h2>
+                <span class="phase-status" id="sqlStatus">Ready</span>
+            </div>
+            <div class="sql-section">
+                <h3>Test SQL Queries</h3>
+                <div class="sql-code" id="sqlQueries">
+-- Test queries will appear here
+SELECT 'Click "Test SQL Updates" to begin' as status;
+                </div>
+                <button class="copy-btn" onclick="copySQL()">Copy SQL</button>
+            </div>
+        </div>
+
+        <!-- Results Panel -->
+        <div class="results-panel">
+            <div class="results-header">
+                <h3>Test Results</h3>
+                <button class="btn btn-primary" onclick="exportResults()">
+                    Export Results
+                </button>
+            </div>
+            <div id="testResults"></div>
+        </div>
+    </div>
+
+    <!-- Modal for details -->
+    <div class="modal" id="detailModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="modalTitle">Test Details</h3>
+            </div>
+            <div class="json-viewer" id="modalContent"></div>
+            <button class="btn btn-primary" onclick="closeModal()" style="margin-top: 20px;">Close</button>
+        </div>
+    </div>
+
+    <script>
+        // Global variables
+        let sessionData = {};
+        let testStats = {
+            total: 0,
+            passed: 0,
+            failed: 0
+        };
+
+        // Test definitions
+        const phase1Tests = [
+            { name: 'Station Registration', endpoint: '/stations/register.php', method: 'POST' },
+            { name: 'PIN Login', endpoint: '/auth/pin_login.php', method: 'POST' },
+            { name: 'Validate PIN', endpoint: '/auth/validate_pin.php', method: 'POST' },
+            { name: 'Open Cash Session', endpoint: '/session/open.php', method: 'POST' },
+            { name: 'Check Active Session', endpoint: '/session/active.php', method: 'POST' },
+            { name: 'Station Heartbeat', endpoint: '/stations/heartbeat.php', method: 'POST' },
+            { name: 'Open Shift', endpoint: '/shifts/open.php', method: 'POST' },
+            { name: 'Get Current Shift', endpoint: '/shifts/current.php', method: 'GET' },
+            { name: 'Close Cash Session', endpoint: '/session/close.php', method: 'POST' },
+            { name: 'Close Shift', endpoint: '/shifts/close.php', method: 'POST' },
+            { name: 'Reconcile Shift', endpoint: '/shifts/reconcile.php', method: 'POST' },
+            { name: 'Logout', endpoint: '/auth/logout.php', method: 'POST' }
+        ];
+
+        const phase2Tests = [
+            { name: 'Create Order', endpoint: '/order/create.php', method: 'POST' },
+            { name: 'Update Order', endpoint: '/order/update.php', method: 'POST' },
+            { name: 'Get Order Status', endpoint: '/order/status.php', method: 'GET' },
+            { name: 'Fire to Kitchen', endpoint: '/order/fire.php', method: 'POST' },
+            { name: 'Park Order', endpoint: '/order/park.php', method: 'POST' },
+            { name: 'Resume Order', endpoint: '/order/resume.php', method: 'POST' },
+            { name: 'Apply Discount', endpoint: '/order/apply_discount.php', method: 'POST' },
+            { name: 'Add Tip', endpoint: '/order/add_tip.php', method: 'POST' },
+            { name: 'Set Service Charge', endpoint: '/order/set_service_charge.php', method: 'POST' },
+            { name: 'Void Item', endpoint: '/order/void_item.php', method: 'POST' },
+            { name: 'Pay Order', endpoint: '/order/pay.php', method: 'POST' },
+            { name: 'Refund Order', endpoint: '/order/refund.php', method: 'POST' },
+            { name: 'Void Order', endpoint: '/order/void_order.php', method: 'POST' }
+        ];
+
+        const phase3Tests = [
+            { name: 'KDS Feed', endpoint: '/kds/feed.php', method: 'GET' },
+            { name: 'Update Item Status', endpoint: '/kds/update_item_status.php', method: 'POST' },
+            { name: 'Update Order Status', endpoint: '/kds/update_order_status.php', method: 'POST' },
+            { name: 'KDS Screen Heartbeat', endpoint: '/kds/screens/heartbeat.php', method: 'POST' }
+        ];
+
+        // Initialize tests display
+        function initializeTests() {
+            displayTests('phase1Tests', phase1Tests);
+            displayTests('phase2Tests', phase2Tests);
+            displayTests('phase3Tests', phase3Tests);
+        }
+
+        function displayTests(containerId, tests) {
+            const container = document.getElementById(containerId);
+            container.innerHTML = '';
+            
+            tests.forEach((test, index) => {
+                const testElement = document.createElement('div');
+                testElement.className = 'test-item';
+                testElement.id = `${containerId}_${index}`;
+                testElement.innerHTML = `
+                    <div class="test-info">
+                        <div class="test-name">${test.name}</div>
+                        <div class="test-endpoint">${test.method} ${test.endpoint}</div>
+                    </div>
+                    <div class="test-actions">
+                        <button class="btn btn-primary" onclick="runSingleTest('${containerId}', ${index})">
+                            Run
+                        </button>
+                        <div class="test-status" id="${containerId}_${index}_status"></div>
+                    </div>
+                `;
+                container.appendChild(testElement);
+            });
+        }
+
+        // Get test data based on test name
+        function getTestData(testName) {
+            const baseData = {
+                tenant_id: parseInt(document.getElementById('tenantId').value),
+                branch_id: parseInt(document.getElementById('branchId').value),
+                station_code: document.getElementById('stationCode').value
+            };
+
+            switch(testName) {
+                case 'Station Registration':
+                    return {
+                        ...baseData,
+                        station_name: 'Test POS Terminal',
+                        station_type: 'pos'
+                    };
+                
+                case 'PIN Login':
+                    return {
+                        pin: document.getElementById('userPin').value,
+                        station_code: baseData.station_code,
+                        tenant_id: baseData.tenant_id,
+                        branch_id: baseData.branch_id
+                    };
+                
+                case 'Validate PIN':
+                    return {
+                        pin: document.getElementById('managerPin').value,
+                        ...baseData
+                    };
+                
+                case 'Open Cash Session':
+                    return {
+                        ...baseData,
+                        user_id: sessionData.user_id || 1,
+                        station_id: sessionData.station_id,
+                        opening_amount: 500.00
+                    };
+                
+                case 'Check Active Session':
+                    return {
+                        ...baseData,
+                        station_id: sessionData.station_id
+                    };
+                
+                case 'Station Heartbeat':
+                    return {
+                        ...baseData,
+                        status_data: { active: true }
+                    };
+                
+                case 'Close Cash Session':
+                    return {
+                        ...baseData,
+                        session_id: sessionData.cash_session_id || 1,
+                        closing_amount: 750.00
+                    };
+                
+                case 'Open Shift':
+                    return {};
+                
+                case 'Close Shift':
+                    return {
+                        shift_id: sessionData.shift_id || 1,
+                        notes: 'Test shift closure'
+                    };
+                
+                case 'Reconcile Shift':
+                    return {
+                        shift_id: sessionData.shift_id || 1,
+                        actual_cash: 1000,
+                        actual_card: 500,
+                        actual_other: 100
+                    };
+                
+                case 'Create Order':
+                    return {
+                        order_type: 'dine_in',
+                        table_id: 1,
+                        items: [
+                            {
+                                product_id: 1,
+                                product_name: 'Test Item',
+                                quantity: 2,
+                                unit_price: 25.00
+                            }
+                        ],
+                        notes: 'Test order'
+                    };
+                
+                case 'Update Order':
+                    return {
+                        order_id: sessionData.order_id || 1,
+                        update_type: 'add_items',
+                        items: [
+                            {
+                                product_id: 2,
+                                product_name: 'Additional Item',
+                                quantity: 1,
+                                unit_price: 15.00
+                            }
+                        ]
+                    };
+                
+                case 'Fire to Kitchen':
+                    return {
+                        order_id: sessionData.order_id || 1,
+                        fire_type: 'all'
+                    };
+                
+                case 'Park Order':
+                    return {
+                        order_id: sessionData.order_id || 1,
+                        reason: 'Customer stepped out'
+                    };
+                
+                case 'Resume Order':
+                    return {
+                        order_id: sessionData.order_id || 1,
+                        table_id: 1
+                    };
+                
+                case 'Apply Discount':
+                    return {
+                        order_id: sessionData.order_id || 1,
+                        discount_type: 'percent',
+                        discount_value: 10,
+                        discount_source: 'manual'
+                    };
+                
+                case 'Add Tip':
+                    return {
+                        order_id: sessionData.order_id || 1,
+                        tip_type: 'percent',
+                        tip_value: 15
+                    };
+                
+                case 'Set Service Charge':
+                    return {
+                        order_id: sessionData.order_id || 1,
+                        action: 'set',
+                        charge_type: 'percent',
+                        charge_value: 10
+                    };
+                
+                case 'Void Item':
+                    return {
+                        order_id: sessionData.order_id || 1,
+                        item_id: sessionData.item_id || 1,
+                        reason: 'Customer changed mind'
+                    };
+                
+                case 'Pay Order':
+                    return {
+                        order_id: sessionData.order_id || 1,
+                        payments: [
+                            {
+                                method: 'cash',
+                                amount: 100.00
+                            }
+                        ]
+                    };
+                
+                case 'Refund Order':
+                    return {
+                        order_id: sessionData.order_id || 1,
+                        refund_type: 'full',
+                        reason: 'Customer complaint'
+                    };
+                
+                case 'Void Order':
+                    return {
+                        order_id: sessionData.order_id || 1,
+                        reason: 'Test void'
+                    };
+                
+                case 'Update Item Status':
+                    return {
+                        item_id: sessionData.item_id || 1,
+                        status: 'preparing'
+                    };
+                
+                case 'Update Order Status':
+                    return {
+                        order_id: sessionData.order_id || 1,
+                        status: 'preparing'
+                    };
+                
+                case 'KDS Screen Heartbeat':
+                    return {
+                        screen_code: 'KDS_MAIN',
+                        status_data: { active: true }
+                    };
+                
+                default:
+                    return baseData;
+            }
+        }
+
+        // Run a single test
+        async function runSingleTest(phase, index) {
+            let tests;
+            switch(phase) {
+                case 'phase1Tests': tests = phase1Tests; break;
+                case 'phase2Tests': tests = phase2Tests; break;
+                case 'phase3Tests': tests = phase3Tests; break;
+            }
+            
+            const test = tests[index];
+            const statusElement = document.getElementById(`${phase}_${index}_status`);
+            statusElement.className = 'test-status running';
+            
+            try {
+                const result = await executeTest(test);
+                
+                if (result.success) {
+                    statusElement.className = 'test-status success';
+                    testStats.passed++;
+                    
+                    // Store important data from responses
+                    if (result.data) {
+                        if (result.data.user_id) sessionData.user_id = result.data.user_id;
+                        if (result.data.station_id) sessionData.station_id = result.data.station_id;
+                        if (result.data.session_id) sessionData.cash_session_id = result.data.session_id;
+                        if (result.data.shift && result.data.shift.id) sessionData.shift_id = result.data.shift.id;
+                        if (result.data.order && result.data.order.id) sessionData.order_id = result.data.order.id;
+                        if (result.data.order_id) sessionData.order_id = result.data.order_id;
+                        if (result.data.items && result.data.items[0]) sessionData.item_id = result.data.items[0].id;
+                    }
+                } else {
+                    statusElement.className = 'test-status error';
+                    testStats.failed++;
+                }
+                
+                testStats.total++;
+                updateStats();
+                addResult(test.name, result);
+                
+            } catch (error) {
+                statusElement.className = 'test-status error';
+                testStats.failed++;
+                testStats.total++;
+                updateStats();
+                addResult(test.name, { success: false, error: error.message });
+            }
+        }
+
+        // Execute test
+        async function executeTest(test) {
+            const baseUrl = document.getElementById('baseUrl').value;
+            const url = baseUrl + test.endpoint;
+            const data = getTestData(test.name);
+            
+            const options = {
+                method: test.method,
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            };
+            
+            if (test.method === 'POST') {
+                options.body = JSON.stringify(data);
+            } else if (test.method === 'GET' && test.name === 'Get Order Status') {
+                const orderId = sessionData.order_id || 1;
+                const finalUrl = url + '?order_id=' + orderId;
+                return fetch(finalUrl, options)
+                    .then(response => response.json())
+                    .catch(error => ({ success: false, error: error.message }));
+            } else if (test.method === 'GET' && test.name === 'KDS Feed') {
+                const finalUrl = url + '?screen_code=KDS_MAIN';
+                return fetch(finalUrl, options)
+                    .then(response => response.json())
+                    .catch(error => ({ success: false, error: error.message }));
+            }
+            
+            try {
+                const response = await fetch(url, options);
+                const result = await response.json();
+                return result;
+            } catch (error) {
+                return { success: false, error: error.message };
+            }
+        }
+
+        // Run all tests in a phase
+        async function runPhase1Tests() {
+            updatePhaseStatus('phase1Status', 'Running...');
+            for (let i = 0; i < phase1Tests.length; i++) {
+                await runSingleTest('phase1Tests', i);
+                await sleep(500);
+            }
+            updatePhaseStatus('phase1Status', 'Complete');
+        }
+
+        async function runPhase2Tests() {
+            // First ensure we have an order
+            if (!sessionData.order_id) {
+                await runSingleTest('phase2Tests', 0); // Create order first
+                await sleep(500);
+            }
+            
+            updatePhaseStatus('phase2Status', 'Running...');
+            for (let i = 0; i < phase2Tests.length; i++) {
+                await runSingleTest('phase2Tests', i);
+                await sleep(500);
+            }
+            updatePhaseStatus('phase2Status', 'Complete');
+        }
+
+        async function runPhase3Tests() {
+            updatePhaseStatus('phase3Status', 'Running...');
+            for (let i = 0; i < phase3Tests.length; i++) {
+                await runSingleTest('phase3Tests', i);
+                await sleep(500);
+            }
+            updatePhaseStatus('phase3Status', 'Complete');
+        }
+
+        async function runAllTests() {
+            clearResults();
+            await runPhase1Tests();
+            await runPhase2Tests();
+            await runPhase3Tests();
+        }
+
+        // SQL Tests
+        async function testSQL() {
+            const sqlQueries = `
+-- Check if parked columns exist
+SELECT COLUMN_NAME 
+FROM INFORMATION_SCHEMA.COLUMNS 
+WHERE TABLE_NAME = 'orders' 
+AND COLUMN_NAME IN ('parked', 'parked_at', 'park_label');
+
+-- Check if KDS tables exist
+SHOW TABLES LIKE 'pos_kds_screens';
+SHOW TABLES LIKE 'order_fire_logs';
+
+-- Check POS shifts columns
+SELECT COLUMN_NAME 
+FROM INFORMATION_SCHEMA.COLUMNS 
+WHERE TABLE_NAME = 'pos_shifts' 
+AND COLUMN_NAME IN ('reconciled_at', 'actual_cash', 'cash_variance');
+
+-- Check for new indexes
+SHOW INDEX FROM orders WHERE Key_name = 'idx_orders_parked';
+SHOW INDEX FROM orders WHERE Key_name = 'idx_orders_kitchen_status';
+
+-- Verify settings
+SELECT \`key\`, \`value\` 
+FROM settings 
+WHERE \`key\` LIKE 'pos_%' 
+ORDER BY \`key\`;
+
+-- Check KDS screens
+SELECT * FROM pos_kds_screens;
+            `;
+            
+            document.getElementById('sqlQueries').textContent = sqlQueries;
+            updatePhaseStatus('sqlStatus', 'Run these queries in phpMyAdmin');
+            
+            addResult('SQL Test Queries', {
+                success: true,
+                data: { message: 'SQL queries ready to copy and test in phpMyAdmin' }
+            });
+        }
+
+        // Helper functions
+        function sleep(ms) {
+            return new Promise(resolve => setTimeout(resolve, ms));
+        }
+
+        function updatePhaseStatus(elementId, status) {
+            document.getElementById(elementId).textContent = status;
+        }
+
+        function updateStats() {
+            document.getElementById('totalTests').textContent = testStats.total;
+            document.getElementById('passedTests').textContent = testStats.passed;
+            document.getElementById('failedTests').textContent = testStats.failed;
+            
+            const successRate = testStats.total > 0 
+                ? Math.round((testStats.passed / testStats.total) * 100) 
+                : 0;
+            document.getElementById('successRate').textContent = successRate + '%';
+            
+            const progressBar = document.getElementById('progressBar');
+            progressBar.style.width = successRate + '%';
+        }
+
+        function addResult(testName, result) {
+            const resultsContainer = document.getElementById('testResults');
+            const resultElement = document.createElement('div');
+            resultElement.className = `result-item ${result.success ? 'success' : 'error'}`;
+            
+            const timestamp = new Date().toLocaleTimeString();
+            
+            resultElement.innerHTML = `
+                <div class="result-header">
+                    <div class="result-title">
+                        <span>${result.success ? '✅' : '❌'}</span>
+                        ${testName}
+                    </div>
+                    <div class="result-time">${timestamp}</div>
+                </div>
+                ${result.data ? `
+                    <div class="result-details">
+                        ${JSON.stringify(result.data, null, 2)}
+                    </div>
+                ` : ''}
+                ${result.error ? `
+                    <div class="result-error">
+                        Error: ${result.error}
+                    </div>
+                ` : ''}
+            `;
+            
+            resultsContainer.insertBefore(resultElement, resultsContainer.firstChild);
+        }
+
+        function clearResults() {
+            document.getElementById('testResults').innerHTML = '';
+            testStats = { total: 0, passed: 0, failed: 0 };
+            updateStats();
+            
+            // Reset all status indicators
+            document.querySelectorAll('.test-status').forEach(el => {
+                el.className = 'test-status';
+            });
+        }
+
+        function copySQL() {
+            const sqlText = document.getElementById('sqlQueries').textContent;
+            navigator.clipboard.writeText(sqlText).then(() => {
+                alert('SQL copied to clipboard!');
+            });
+        }
+
+        function exportResults() {
+            const results = document.getElementById('testResults').innerText;
+            const blob = new Blob([results], { type: 'text/plain' });
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `sme180-test-results-${new Date().toISOString()}.txt`;
+            a.click();
+        }
+
+        function closeModal() {
+            document.getElementById('detailModal').classList.remove('active');
+        }
+
+        // Initialize on load
+        document.addEventListener('DOMContentLoaded', initializeTests);
+    </script>
+</body>
+</html>
