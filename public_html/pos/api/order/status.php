@@ -1,239 +1,282 @@
-## 1. /public_html/pos/api/order/status.php
 <?php
 /**
- * SME 180 POS - Order Status API
+ * SME 180 POS - Get Order Status API
  * Path: /public_html/pos/api/order/status.php
  * 
- * Gets and updates order status through lifecycle
+ * Returns detailed status and information about an order
  */
 
 declare(strict_types=1);
+error_reporting(E_ALL);
+ini_set('display_errors', '0');
 
+header('Content-Type: application/json; charset=utf-8');
+header('Access-Control-Allow-Origin: *');
+header('Access-Control-Allow-Methods: GET, OPTIONS');
+header('Access-Control-Allow-Headers: Content-Type, Authorization');
+
+if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
+    http_response_code(200);
+    exit;
+}
+
+// Include required files
 require_once __DIR__ . '/../../../config/db.php';
 require_once __DIR__ . '/../../../middleware/pos_auth.php';
 
-pos_auth_require_login();
-$user = pos_get_current_user();
-
-$tenantId = (int)($_SESSION['tenant_id'] ?? 0);
-$branchId = (int)($_SESSION['branch_id'] ?? 0);
-$userId = (int)($_SESSION['user_id'] ?? 0);
-
-if (!$tenantId || !$branchId || !$userId) {
-    json_response(['success' => false, 'error' => 'Invalid session'], 401);
+// Start session if not started
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
 }
 
-$method = $_SERVER['REQUEST_METHOD'];
+// Helper function for JSON responses
+function json_response($data, $code = 200) {
+    http_response_code($code);
+    echo json_encode($data, JSON_UNESCAPED_UNICODE);
+    exit;
+}
 
-if ($method === 'GET') {
-    // Get order status
-    $orderId = (int)($_GET['order_id'] ?? 0);
+try {
+    // Authentication check
+    pos_auth_require_login();
+    $user = pos_get_current_user();
+    
+    if (!$user) {
+        json_response(['success' => false, 'error' => 'Not authenticated'], 401);
+    }
+    
+    // Get tenant and branch from session
+    $tenantId = (int)($_SESSION['tenant_id'] ?? 0);
+    $branchId = (int)($_SESSION['branch_id'] ?? 0);
+    
+    if (!$tenantId || !$branchId) {
+        json_response(['success' => false, 'error' => 'Invalid session'], 401);
+    }
+    
+    // Get order ID from query parameters
+    $orderId = isset($_GET['order_id']) ? (int)$_GET['order_id'] : 0;
     
     if (!$orderId) {
         json_response(['success' => false, 'error' => 'Order ID is required'], 400);
     }
     
-    try {
-        $pdo = db();
-        
+    // Get database connection
+    $pdo = db();
+    
+    // Get order details
+    $stmt = $pdo->prepare("
+        SELECT 
+            o.*,
+            dt.table_number,
+            u.name as cashier_name,
+            s.station_name,
+            c.name as customer_full_name,
+            c.email as customer_email,
+            c.loyalty_points
+        FROM orders o
+        LEFT JOIN dining_tables dt ON dt.id = o.table_id
+        LEFT JOIN users u ON u.id = o.cashier_id
+        LEFT JOIN pos_stations s ON s.id = o.station_id
+        LEFT JOIN customers c ON c.id = o.customer_id
+        WHERE o.id = :order_id
+        AND o.tenant_id = :tenant_id
+        AND o.branch_id = :branch_id
+    ");
+    
+    $stmt->execute([
+        'order_id' => $orderId,
+        'tenant_id' => $tenantId,
+        'branch_id' => $branchId
+    ]);
+    
+    $order = $stmt->fetch(PDO::FETCH_ASSOC);
+    
+    if (!$order) {
+        json_response(['success' => false, 'error' => 'Order not found'], 404);
+    }
+    
+    // Get order items
+    $stmt = $pdo->prepare("
+        SELECT 
+            oi.*,
+            p.sku,
+            p.category_id,
+            pc.name as category_name
+        FROM order_items oi
+        LEFT JOIN products p ON p.id = oi.product_id
+        LEFT JOIN product_categories pc ON pc.id = p.category_id
+        WHERE oi.order_id = :order_id
+        ORDER BY oi.created_at ASC
+    ");
+    
+    $stmt->execute(['order_id' => $orderId]);
+    $items = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    
+    // Get modifiers for each item
+    foreach ($items as &$item) {
         $stmt = $pdo->prepare("
-            SELECT 
-                o.id,
-                o.receipt_reference,
-                o.status,
-                o.kitchen_status,
-                o.payment_status,
-                o.created_at,
-                o.fired_at,
-                o.ready_at,
-                o.closed_at,
-                (SELECT COUNT(*) FROM order_items WHERE order_id = o.id AND fire_status = 'pending' AND is_voided = 0) as pending_items,
-                (SELECT COUNT(*) FROM order_items WHERE order_id = o.id AND fire_status = 'fired' AND is_voided = 0) as fired_items,
-                (SELECT COUNT(*) FROM order_items WHERE order_id = o.id AND state = 'ready' AND is_voided = 0) as ready_items
-            FROM orders o
-            WHERE o.id = :order_id
-            AND o.tenant_id = :tenant_id
-            AND o.branch_id = :branch_id
+            SELECT * FROM order_item_modifiers
+            WHERE order_item_id = :item_id
         ");
-        $stmt->execute([
-            'order_id' => $orderId,
-            'tenant_id' => $tenantId,
-            'branch_id' => $branchId
-        ]);
-        
-        $order = $stmt->fetch(PDO::FETCH_ASSOC);
-        
-        if (!$order) {
-            json_response(['success' => false, 'error' => 'Order not found'], 404);
-        }
-        
-        // Get item details
+        $stmt->execute(['item_id' => $item['id']]);
+        $item['modifiers'] = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+    
+    // Get payment details
+    $stmt = $pdo->prepare("
+        SELECT 
+            op.*,
+            u.name as processed_by_name
+        FROM order_payments op
+        LEFT JOIN users u ON u.id = op.processed_by
+        WHERE op.order_id = :order_id
+        ORDER BY op.created_at ASC
+    ");
+    
+    $stmt->execute(['order_id' => $orderId]);
+    $payments = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    
+    // Get order logs
+    $stmt = $pdo->prepare("
+        SELECT 
+            ol.*,
+            u.name as user_name
+        FROM order_logs ol
+        LEFT JOIN users u ON u.id = ol.user_id
+        WHERE ol.order_id = :order_id
+        ORDER BY ol.created_at DESC
+        LIMIT 20
+    ");
+    
+    $stmt->execute(['order_id' => $orderId]);
+    $logs = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    
+    // Get refund details if any
+    $refunds = [];
+    if ($order['status'] === 'refunded' || $order['refunded_amount'] > 0) {
         $stmt = $pdo->prepare("
             SELECT 
-                id,
-                product_name,
-                quantity,
-                fire_status,
-                state,
-                is_voided
-            FROM order_items
-            WHERE order_id = :order_id
-            ORDER BY id
+                r.*,
+                u.name as refunded_by_name
+            FROM order_refunds r
+            LEFT JOIN users u ON u.id = r.refunded_by
+            WHERE r.order_id = :order_id
         ");
         $stmt->execute(['order_id' => $orderId]);
-        $items = $stmt->fetchAll(PDO::FETCH_ASSOC);
-        
-        json_response([
-            'success' => true,
-            'order' => [
-                'id' => (int)$order['id'],
-                'reference' => $order['receipt_reference'],
-                'status' => $order['status'],
-                'kitchen_status' => $order['kitchen_status'],
-                'payment_status' => $order['payment_status'],
-                'timestamps' => [
-                    'created' => $order['created_at'],
-                    'fired' => $order['fired_at'],
-                    'ready' => $order['ready_at'],
-                    'closed' => $order['closed_at']
-                ],
-                'counts' => [
-                    'pending' => (int)$order['pending_items'],
-                    'fired' => (int)$order['fired_items'],
-                    'ready' => (int)$order['ready_items']
-                ],
-                'items' => $items
-            ]
-        ]);
-        
-    } catch (Exception $e) {
-        error_log('Get order status error: ' . $e->getMessage());
-        json_response(['success' => false, 'error' => 'Failed to get order status'], 500);
+        $refunds = $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
     
-} else if ($method === 'POST') {
-    // Update order status
-    $input = json_decode(file_get_contents('php://input'), true);
-    
-    if (!isset($input['order_id']) || !isset($input['status'])) {
-        json_response(['success' => false, 'error' => 'Order ID and status are required'], 400);
-    }
-    
-    $orderId = (int)$input['order_id'];
-    $newStatus = $input['status'];
-    $kitchenStatus = $input['kitchen_status'] ?? null;
-    
-    // Validate status
-    $validStatuses = ['open', 'held', 'sent', 'preparing', 'ready', 'served', 'closed'];
-    if (!in_array($newStatus, $validStatuses)) {
-        json_response(['success' => false, 'error' => 'Invalid status'], 400);
-    }
-    
-    try {
-        $pdo = db();
-        $pdo->beginTransaction();
-        
-        // Get current order
+    // Get kitchen status details
+    $kitchenStatus = null;
+    if ($order['kitchen_status'] !== 'pending') {
         $stmt = $pdo->prepare("
-            SELECT * FROM orders 
-            WHERE id = :order_id 
-            AND tenant_id = :tenant_id
-            AND branch_id = :branch_id
-            FOR UPDATE
+            SELECT 
+                COUNT(*) as total_items,
+                SUM(CASE WHEN kitchen_status = 'pending' THEN 1 ELSE 0 END) as pending,
+                SUM(CASE WHEN kitchen_status = 'preparing' THEN 1 ELSE 0 END) as preparing,
+                SUM(CASE WHEN kitchen_status = 'ready' THEN 1 ELSE 0 END) as ready,
+                SUM(CASE WHEN kitchen_status = 'served' THEN 1 ELSE 0 END) as served,
+                MIN(fired_at) as first_fired,
+                MAX(ready_at) as last_ready
+            FROM order_items
+            WHERE order_id = :order_id
+            AND is_voided = 0
         ");
-        $stmt->execute([
-            'order_id' => $orderId,
-            'tenant_id' => $tenantId,
-            'branch_id' => $branchId
-        ]);
+        $stmt->execute(['order_id' => $orderId]);
+        $kitchenStatus = $stmt->fetch(PDO::FETCH_ASSOC);
         
-        $order = $stmt->fetch(PDO::FETCH_ASSOC);
-        
-        if (!$order) {
-            json_response(['success' => false, 'error' => 'Order not found'], 404);
+        // Calculate preparation time
+        if ($kitchenStatus['first_fired'] && $kitchenStatus['last_ready']) {
+            $prepTime = strtotime($kitchenStatus['last_ready']) - strtotime($kitchenStatus['first_fired']);
+            $kitchenStatus['prep_time_minutes'] = round($prepTime / 60);
         }
-        
-        // Check if status transition is valid
-        $invalidTransitions = [
-            'closed' => ['open', 'held', 'sent'], // Can't go back from closed
-            'voided' => array_diff($validStatuses, ['voided']), // Can't change voided
-            'refunded' => array_diff($validStatuses, ['refunded']) // Can't change refunded
-        ];
-        
-        if (isset($invalidTransitions[$order['status']]) && 
-            in_array($newStatus, $invalidTransitions[$order['status']])) {
-            json_response([
-                'success' => false, 
-                'error' => 'Cannot transition from ' . $order['status'] . ' to ' . $newStatus
-            ], 400);
-        }
-        
-        // Update order status
-        $updates = ['status = :status'];
-        $params = [
-            'status' => $newStatus,
-            'order_id' => $orderId
-        ];
-        
-        if ($kitchenStatus) {
-            $updates[] = 'kitchen_status = :kitchen_status';
-            $params['kitchen_status'] = $kitchenStatus;
-        }
-        
-        // Set timestamps based on status
-        if ($newStatus === 'ready' && !$order['ready_at']) {
-            $updates[] = 'ready_at = NOW()';
-        }
-        if ($newStatus === 'closed' && !$order['closed_at']) {
-            $updates[] = 'closed_at = NOW()';
-        }
-        
-        $updates[] = 'updated_at = NOW()';
-        
-        $sql = "UPDATE orders SET " . implode(', ', $updates) . " WHERE id = :order_id";
-        $stmt = $pdo->prepare($sql);
-        $stmt->execute($params);
-        
-        // Log status change
-        $stmt = $pdo->prepare("
-            INSERT INTO order_item_events (
-                tenant_id, order_id, event_type, payload, created_by, created_at
-            ) VALUES (
-                :tenant_id, :order_id, 'status_change', :payload, :user_id, NOW()
-            )
-        ");
-        $stmt->execute([
-            'tenant_id' => $tenantId,
-            'order_id' => $orderId,
-            'payload' => json_encode([
-                'from' => $order['status'],
-                'to' => $newStatus,
-                'kitchen_status' => $kitchenStatus
-            ]),
-            'user_id' => $userId
-        ]);
-        
-        $pdo->commit();
-        
-        json_response([
-            'success' => true,
-            'order_id' => $orderId,
-            'status' => $newStatus,
-            'kitchen_status' => $kitchenStatus
-        ]);
-        
-    } catch (Exception $e) {
-        if (isset($pdo) && $pdo->inTransaction()) {
-            $pdo->rollBack();
-        }
-        error_log('Update order status error: ' . $e->getMessage());
-        json_response(['success' => false, 'error' => 'Failed to update status'], 500);
     }
-}
-
-function json_response($data, $statusCode = 200) {
-    http_response_code($statusCode);
-    header('Content-Type: application/json');
-    echo json_encode($data);
-    exit;
+    
+    // Get currency symbol
+    $stmt = $pdo->prepare("
+        SELECT value FROM settings 
+        WHERE tenant_id = :tenant_id 
+        AND `key` = 'currency_symbol' 
+        LIMIT 1
+    ");
+    $stmt->execute(['tenant_id' => $tenantId]);
+    $currencySymbol = $stmt->fetchColumn() ?: '$';
+    
+    // Calculate summary
+    $activeItems = array_filter($items, function($item) {
+        return !$item['is_voided'];
+    });
+    
+    $voidedItems = array_filter($items, function($item) {
+        return $item['is_voided'];
+    });
+    
+    json_response([
+        'success' => true,
+        'order' => [
+            'id' => (int)$order['id'],
+            'receipt_reference' => $order['receipt_reference'],
+            'order_type' => $order['order_type'],
+            'status' => $order['status'],
+            'payment_status' => $order['payment_status'],
+            'kitchen_status' => $order['kitchen_status'],
+            'parked' => (bool)$order['parked'],
+            'created_at' => $order['created_at'],
+            'updated_at' => $order['updated_at']
+        ],
+        'location' => [
+            'table_id' => $order['table_id'],
+            'table_number' => $order['table_number'],
+            'station_id' => $order['station_id'],
+            'station_name' => $order['station_name']
+        ],
+        'customer' => [
+            'id' => $order['customer_id'],
+            'name' => $order['customer_name'] ?: $order['customer_full_name'],
+            'phone' => $order['customer_phone'],
+            'email' => $order['customer_email'],
+            'loyalty_points' => $order['loyalty_points']
+        ],
+        'cashier' => [
+            'id' => $order['cashier_id'],
+            'name' => $order['cashier_name']
+        ],
+        'amounts' => [
+            'currency' => $currencySymbol,
+            'subtotal' => (float)$order['subtotal'],
+            'discount_amount' => (float)$order['discount_amount'],
+            'tax_amount' => (float)$order['tax_amount'],
+            'tip_amount' => (float)$order['tip_amount'],
+            'service_charge' => (float)$order['service_charge'],
+            'total_amount' => (float)$order['total_amount'],
+            'paid_amount' => (float)$order['paid_amount'],
+            'refunded_amount' => (float)$order['refunded_amount'],
+            'balance_due' => (float)$order['total_amount'] - (float)$order['paid_amount']
+        ],
+        'items' => [
+            'active' => array_values($activeItems),
+            'voided' => array_values($voidedItems),
+            'total_count' => count($items),
+            'active_count' => count($activeItems),
+            'voided_count' => count($voidedItems)
+        ],
+        'payments' => $payments,
+        'refunds' => $refunds,
+        'kitchen' => $kitchenStatus,
+        'logs' => $logs,
+        'timestamps' => [
+            'created' => $order['created_at'],
+            'updated' => $order['updated_at'],
+            'fired' => $order['fired_at'],
+            'paid' => $order['paid_at'],
+            'closed' => $order['closed_at']
+        ]
+    ]);
+    
+} catch (PDOException $e) {
+    error_log('Get order status DB error: ' . $e->getMessage());
+    json_response(['success' => false, 'error' => 'Database error'], 500);
+} catch (Exception $e) {
+    error_log('Get order status error: ' . $e->getMessage());
+    json_response(['success' => false, 'error' => $e->getMessage()], 500);
 }
