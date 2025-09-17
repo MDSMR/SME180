@@ -1,198 +1,213 @@
-## 1. /public_html/pos/api/kds/feed.php
 <?php
 /**
  * SME 180 POS - KDS Feed API
  * Path: /public_html/pos/api/kds/feed.php
  * 
- * Provides real-time feed of orders for kitchen display screens
+ * Returns active kitchen orders for display screens
  */
 
 declare(strict_types=1);
+error_reporting(E_ALL);
+ini_set('display_errors', '0');
 
+header('Content-Type: application/json; charset=utf-8');
+header('Access-Control-Allow-Origin: *');
+header('Access-Control-Allow-Methods: GET, OPTIONS');
+header('Access-Control-Allow-Headers: Content-Type, Authorization');
+
+if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
+    http_response_code(200);
+    exit;
+}
+
+// Include required files
 require_once __DIR__ . '/../../../config/db.php';
 require_once __DIR__ . '/../../../middleware/pos_auth.php';
 
-pos_auth_require_login();
-
-$tenantId = (int)($_SESSION['tenant_id'] ?? 0);
-$branchId = (int)($_SESSION['branch_id'] ?? 0);
-$screenCode = $_GET['screen_code'] ?? '';
-
-if (!$tenantId || !$branchId) {
-    json_response(['success' => false, 'error' => 'Invalid session'], 401);
+// Start session if not started
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
 }
 
-if (empty($screenCode)) {
-    json_response(['success' => false, 'error' => 'Screen code is required'], 400);
+// Helper function for JSON responses
+function json_response($data, $code = 200) {
+    http_response_code($code);
+    echo json_encode($data, JSON_UNESCAPED_UNICODE);
+    exit;
 }
 
 try {
-    $pdo = db();
+    // Authentication check
+    pos_auth_require_login();
+    $user = pos_get_current_user();
     
-    // Get screen configuration
-    $stmt = $pdo->prepare("
-        SELECT * FROM pos_kds_screens 
-        WHERE tenant_id = :tenant_id 
-        AND branch_id = :branch_id 
-        AND screen_code = :screen_code
-        AND is_active = 1
-    ");
-    $stmt->execute([
-        'tenant_id' => $tenantId,
-        'branch_id' => $branchId,
-        'screen_code' => $screenCode
-    ]);
-    
-    $screen = $stmt->fetch(PDO::FETCH_ASSOC);
-    
-    if (!$screen) {
-        json_response(['success' => false, 'error' => 'Screen not found or inactive'], 404);
+    if (!$user) {
+        json_response(['success' => false, 'error' => 'Not authenticated'], 401);
     }
     
-    // Update heartbeat
-    $stmt = $pdo->prepare("
-        UPDATE pos_kds_screens 
-        SET last_heartbeat = NOW() 
-        WHERE id = :id
-    ");
-    $stmt->execute(['id' => $screen['id']]);
+    // Get tenant and branch from session
+    $tenantId = (int)($_SESSION['tenant_id'] ?? 0);
+    $branchId = (int)($_SESSION['branch_id'] ?? 0);
     
-    // Get category filter if configured
-    $categories = json_decode($screen['categories'] ?? '[]', true);
+    if (!$tenantId || !$branchId) {
+        json_response(['success' => false, 'error' => 'Invalid session'], 401);
+    }
     
-    // Build query for orders
-    $sql = "
-        SELECT DISTINCT
-            o.id as order_id,
-            o.receipt_reference,
-            o.order_type,
-            o.table_id,
-            o.customer_name,
-            o.kitchen_status,
-            o.fired_at,
-            o.ready_at,
-            o.created_at,
-            TIMESTAMPDIFF(MINUTE, o.fired_at, NOW()) as minutes_elapsed,
-            dt.table_number,
-            u.name as server_name
-        FROM orders o
-        LEFT JOIN dining_tables dt ON dt.id = o.table_id
-        LEFT JOIN users u ON u.id = o.created_by_user_id
-        JOIN order_items oi ON oi.order_id = o.id
-        LEFT JOIN products p ON p.id = oi.product_id
-        WHERE o.tenant_id = :tenant_id
-        AND o.branch_id = :branch_id
-        AND o.kitchen_status IN ('fired', 'preparing', 'ready')
-        AND o.status NOT IN ('voided', 'refunded', 'closed')
-        AND oi.fire_status = 'fired'
-        AND oi.is_voided = 0
-    ";
+    // Get filter parameters
+    $screenId = isset($_GET['screen_id']) ? (int)$_GET['screen_id'] : null;
+    $statusFilter = $_GET['status'] ?? 'active'; // active, preparing, ready
+    $stationFilter = isset($_GET['station_id']) ? (int)$_GET['station_id'] : null;
+    $limit = min((int)($_GET['limit'] ?? 50), 100);
+    
+    // Get database connection
+    $pdo = db();
+    
+    // Build query based on filters
+    $conditions = [
+        'o.tenant_id = :tenant_id',
+        'o.branch_id = :branch_id',
+        'o.status NOT IN ("voided", "refunded")',
+        'o.kitchen_status IN ("sent", "preparing", "ready")'
+    ];
     
     $params = [
         'tenant_id' => $tenantId,
         'branch_id' => $branchId
     ];
     
-    // Add category filter if configured
-    if (!empty($categories)) {
-        $placeholders = array_map(function($i) { return ':cat' . $i; }, range(0, count($categories) - 1));
-        $sql .= " AND p.category_id IN (" . implode(',', $placeholders) . ")";
-        foreach ($categories as $i => $catId) {
-            $params['cat' . $i] = $catId;
-        }
+    if ($statusFilter === 'preparing') {
+        $conditions[] = 'o.kitchen_status = "preparing"';
+    } elseif ($statusFilter === 'ready') {
+        $conditions[] = 'o.kitchen_status = "ready"';
     }
     
-    // Add screen type specific filtering
-    if ($screen['screen_type'] === 'bar') {
-        // Bar screens only see beverage items
-        $sql .= " AND p.category_id IN (SELECT id FROM categories WHERE name LIKE '%beverage%' OR name LIKE '%drink%')";
+    if ($stationFilter) {
+        $conditions[] = 'o.station_id = :station_id';
+        $params['station_id'] = $stationFilter;
     }
     
-    $sql .= " ORDER BY 
-        CASE o.kitchen_status 
-            WHEN 'ready' THEN 3
-            WHEN 'preparing' THEN 1
-            WHEN 'fired' THEN 2
-        END,
-        o.fired_at ASC";
+    $whereClause = implode(' AND ', $conditions);
     
-    $stmt = $pdo->prepare($sql);
+    // Get orders with their items
+    $stmt = $pdo->prepare("
+        SELECT 
+            o.id,
+            o.receipt_reference,
+            o.order_type,
+            o.table_id,
+            o.customer_name,
+            o.kitchen_status,
+            o.fired_at,
+            o.kitchen_notes,
+            o.created_at,
+            dt.table_number,
+            s.station_name,
+            TIMESTAMPDIFF(MINUTE, o.fired_at, NOW()) as minutes_elapsed,
+            (
+                SELECT COUNT(*) 
+                FROM order_items 
+                WHERE order_id = o.id 
+                AND is_voided = 0 
+                AND kitchen_status != 'served'
+            ) as pending_items_count,
+            (
+                SELECT GROUP_CONCAT(
+                    JSON_OBJECT(
+                        'id', oi.id,
+                        'product_name', oi.product_name,
+                        'quantity', oi.quantity,
+                        'kitchen_status', oi.kitchen_status,
+                        'kitchen_notes', oi.kitchen_notes,
+                        'fired_at', oi.fired_at,
+                        'started_at', oi.started_at,
+                        'ready_at', oi.ready_at,
+                        'cook_time_minutes', oi.cook_time_minutes,
+                        'modifiers', (
+                            SELECT GROUP_CONCAT(
+                                JSON_OBJECT(
+                                    'name', modifier_name,
+                                    'quantity', quantity
+                                )
+                            )
+                            FROM order_item_modifiers
+                            WHERE order_item_id = oi.id
+                        )
+                    )
+                )
+                FROM order_items oi
+                WHERE oi.order_id = o.id
+                AND oi.is_voided = 0
+                AND oi.kitchen_status != 'served'
+            ) as items_json
+        FROM orders o
+        LEFT JOIN dining_tables dt ON dt.id = o.table_id
+        LEFT JOIN pos_stations s ON s.id = o.station_id
+        WHERE $whereClause
+        ORDER BY 
+            CASE 
+                WHEN o.kitchen_status = 'ready' THEN 1
+                WHEN o.kitchen_status = 'preparing' THEN 2
+                ELSE 3
+            END,
+            o.fired_at ASC
+        LIMIT :limit
+    ");
+    
+    $params['limit'] = $limit;
     $stmt->execute($params);
     $orders = $stmt->fetchAll(PDO::FETCH_ASSOC);
     
-    // Get items for each order
-    $ordersWithItems = [];
+    // Process orders and parse items
+    $processedOrders = [];
     foreach ($orders as $order) {
-        $stmt = $pdo->prepare("
-            SELECT 
-                oi.id as item_id,
-                oi.product_id,
-                oi.product_name,
-                oi.quantity,
-                oi.notes,
-                oi.kitchen_notes,
-                oi.fire_status,
-                oi.state as item_status,
-                oi.fire_time,
-                p.category_id,
-                c.name as category_name,
-                (SELECT GROUP_CONCAT(CONCAT(oiv.variation_group, ': ', oiv.variation_value) SEPARATOR ', ')
-                 FROM order_item_variations oiv
-                 WHERE oiv.order_item_id = oi.id) as variations
-            FROM order_items oi
-            LEFT JOIN products p ON p.id = oi.product_id
-            LEFT JOIN categories c ON c.id = p.category_id
-            WHERE oi.order_id = :order_id
-            AND oi.fire_status = 'fired'
-            AND oi.is_voided = 0
-        ");
-        
-        if (!empty($categories)) {
-            $itemSql = " AND p.category_id IN (" . implode(',', $placeholders) . ")";
-            $stmt = $pdo->prepare(str_replace("AND oi.is_voided = 0", "AND oi.is_voided = 0" . $itemSql, $stmt->queryString));
-            foreach ($categories as $i => $catId) {
-                $params['cat' . $i] = $catId;
+        $items = [];
+        if ($order['items_json']) {
+            $itemsArray = explode('},{', trim($order['items_json'], '{}'));
+            foreach ($itemsArray as $itemJson) {
+                if (!empty($itemJson)) {
+                    $items[] = json_decode('{' . $itemJson . '}', true);
+                }
             }
         }
         
-        $stmt->execute(array_merge(['order_id' => $order['order_id']], 
-                                  array_intersect_key($params, array_flip(array_filter(array_keys($params), 
-                                                      function($k) { return strpos($k, 'cat') === 0; })))));
-        
-        $items = $stmt->fetchAll(PDO::FETCH_ASSOC);
-        
-        if (!empty($items)) {
-            $order['items'] = $items;
-            $order['item_count'] = count($items);
-            
-            // Determine display color based on time
-            $minutesElapsed = (int)$order['minutes_elapsed'];
-            if ($minutesElapsed < 10) {
-                $order['display_color'] = 'green';
-            } elseif ($minutesElapsed < 15) {
-                $order['display_color'] = 'yellow';
-            } elseif ($minutesElapsed < 20) {
-                $order['display_color'] = 'orange';
-            } else {
-                $order['display_color'] = 'red';
-            }
-            
-            $ordersWithItems[] = $order;
+        // Determine display urgency
+        $urgency = 'normal';
+        if ($order['minutes_elapsed'] > 20) {
+            $urgency = 'urgent';
+        } elseif ($order['minutes_elapsed'] > 15) {
+            $urgency = 'warning';
         }
+        
+        $processedOrders[] = [
+            'id' => (int)$order['id'],
+            'receipt_reference' => $order['receipt_reference'],
+            'order_type' => $order['order_type'],
+            'table_number' => $order['table_number'],
+            'customer_name' => $order['customer_name'],
+            'kitchen_status' => $order['kitchen_status'],
+            'fired_at' => $order['fired_at'],
+            'minutes_elapsed' => (int)$order['minutes_elapsed'],
+            'urgency' => $urgency,
+            'station_name' => $order['station_name'],
+            'pending_items' => (int)$order['pending_items_count'],
+            'items' => $items
+        ];
     }
     
-    // Get summary stats
+    // Get summary statistics
     $stmt = $pdo->prepare("
         SELECT 
-            COUNT(DISTINCT CASE WHEN kitchen_status = 'fired' THEN id END) as fired_count,
-            COUNT(DISTINCT CASE WHEN kitchen_status = 'preparing' THEN id END) as preparing_count,
-            COUNT(DISTINCT CASE WHEN kitchen_status = 'ready' THEN id END) as ready_count
-        FROM orders
-        WHERE tenant_id = :tenant_id
-        AND branch_id = :branch_id
-        AND kitchen_status IN ('fired', 'preparing', 'ready')
-        AND status NOT IN ('voided', 'refunded', 'closed')
+            COUNT(DISTINCT o.id) as total_orders,
+            COUNT(DISTINCT CASE WHEN o.kitchen_status = 'preparing' THEN o.id END) as preparing_orders,
+            COUNT(DISTINCT CASE WHEN o.kitchen_status = 'ready' THEN o.id END) as ready_orders,
+            AVG(TIMESTAMPDIFF(MINUTE, o.fired_at, NOW())) as avg_wait_time
+        FROM orders o
+        WHERE o.tenant_id = :tenant_id
+        AND o.branch_id = :branch_id
+        AND o.kitchen_status IN ('sent', 'preparing', 'ready')
+        AND o.fired_at >= DATE_SUB(NOW(), INTERVAL 4 HOUR)
     ");
+    
     $stmt->execute([
         'tenant_id' => $tenantId,
         'branch_id' => $branchId
@@ -201,30 +216,21 @@ try {
     
     json_response([
         'success' => true,
-        'screen' => [
-            'id' => (int)$screen['id'],
-            'code' => $screen['screen_code'],
-            'name' => $screen['screen_name'],
-            'type' => $screen['screen_type']
+        'orders' => $processedOrders,
+        'statistics' => [
+            'total_active' => (int)$stats['total_orders'],
+            'preparing' => (int)$stats['preparing_orders'],
+            'ready' => (int)$stats['ready_orders'],
+            'avg_wait_minutes' => round((float)$stats['avg_wait_time'], 1)
         ],
-        'stats' => [
-            'fired' => (int)$stats['fired_count'],
-            'preparing' => (int)$stats['preparing_count'],
-            'ready' => (int)$stats['ready_count'],
-            'total' => count($ordersWithItems)
-        ],
-        'orders' => $ordersWithItems,
-        'timestamp' => date('Y-m-d H:i:s')
+        'timestamp' => date('Y-m-d H:i:s'),
+        'refresh_interval' => 5000 // Suggested refresh interval in ms
     ]);
     
+} catch (PDOException $e) {
+    error_log('KDS feed DB error: ' . $e->getMessage());
+    json_response(['success' => false, 'error' => 'Database error'], 500);
 } catch (Exception $e) {
     error_log('KDS feed error: ' . $e->getMessage());
-    json_response(['success' => false, 'error' => 'Failed to get KDS feed'], 500);
-}
-
-function json_response($data, $statusCode = 200) {
-    http_response_code($statusCode);
-    header('Content-Type: application/json');
-    echo json_encode($data);
-    exit;
+    json_response(['success' => false, 'error' => $e->getMessage()], 500);
 }
