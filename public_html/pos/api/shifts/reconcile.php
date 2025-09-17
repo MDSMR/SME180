@@ -1,5 +1,4 @@
 ## 4. /public_html/pos/api/shifts/reconcile.php
-```php
 <?php
 /**
  * SME 180 POS - Shift Reconciliation API
