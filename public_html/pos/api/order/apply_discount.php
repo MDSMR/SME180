@@ -1,5 +1,4 @@
 ## 5. /public_html/pos/api/order/apply_discount.php
-```php
 <?php
 /**
  * SME 180 POS - Apply Discount API
