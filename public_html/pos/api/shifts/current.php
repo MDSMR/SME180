@@ -1,5 +1,4 @@
 ## 3. /public_html/pos/api/shifts/current.php
-```php
 <?php
 /**
  * SME 180 POS - Current Shift API
