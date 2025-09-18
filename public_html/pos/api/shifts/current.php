@@ -1,9 +1,10 @@
 <?php
 /**
- * SME 180 POS - Get Current Shift API
+ * SME 180 POS - Get Current Shift API (FIXED)
  * Path: /public_html/pos/api/shifts/current.php
  * 
  * Returns information about the current active shift
+ * Fixed: Handles missing opening_cash column by extracting from notes
  */
 
 declare(strict_types=1);
@@ -58,10 +59,25 @@ try {
     // Get database connection
     $pdo = db();
     
+    // Check if opening_cash column exists
+    $checkColumnStmt = $pdo->prepare("
+        SELECT COUNT(*) 
+        FROM INFORMATION_SCHEMA.COLUMNS 
+        WHERE TABLE_SCHEMA = DATABASE() 
+        AND TABLE_NAME = 'pos_shifts' 
+        AND COLUMN_NAME = 'opening_cash'
+    ");
+    $checkColumnStmt->execute();
+    $hasOpeningCashColumn = (bool)$checkColumnStmt->fetchColumn();
+    
+    // Build query based on available columns
+    $selectOpeningCash = $hasOpeningCashColumn ? 's.opening_cash' : '0 as opening_cash';
+    
     // Get current active shift
     $stmt = $pdo->prepare("
         SELECT 
             s.*,
+            $selectOpeningCash,
             u.name as cashier_name,
             st.station_name,
             (
@@ -94,13 +110,13 @@ try {
                 ) AND payment_method NOT IN ('cash', 'card')
             ) as other_sales
         FROM pos_shifts s
-        LEFT JOIN users u ON u.id = s.cashier_id
+        LEFT JOIN users u ON u.id = s.started_by
         LEFT JOIN pos_stations st ON st.id = s.station_id
         WHERE s.tenant_id = :tenant_id
         AND s.branch_id = :branch_id
-        AND s.cashier_id = :user_id
+        AND s.started_by = :user_id
         AND s.status = 'open'
-        ORDER BY s.opened_at DESC
+        ORDER BY s.started_at DESC
         LIMIT 1
     ");
     
@@ -120,8 +136,23 @@ try {
         ]);
     }
     
+    // Extract opening balance from notes if column doesn't exist
+    $openingCash = 0.00;
+    if ($hasOpeningCashColumn) {
+        $openingCash = (float)($shift['opening_cash'] ?? 0);
+    } else {
+        // Extract from notes field (format: "Opening Balance: 300.00")
+        if (!empty($shift['notes']) && preg_match('/Opening Balance:\s*[\$]?([\d,]+\.?\d*)/', $shift['notes'], $matches)) {
+            $openingCash = floatval(str_replace(',', '', $matches[1]));
+        }
+        // Also check session as fallback
+        if ($openingCash == 0 && isset($_SESSION['shift_opening_balance'])) {
+            $openingCash = (float)$_SESSION['shift_opening_balance'];
+        }
+    }
+    
     // Calculate shift duration
-    $openedAt = strtotime($shift['opened_at']);
+    $openedAt = strtotime($shift['started_at']);
     $duration = time() - $openedAt;
     $hours = floor($duration / 3600);
     $minutes = floor(($duration % 3600) / 60);
@@ -144,40 +175,48 @@ try {
     $stmt->execute(['shift_id' => $shift['id']]);
     $recentOrders = $stmt->fetchAll(PDO::FETCH_ASSOC);
     
-    // Get cash movements
-    $stmt = $pdo->prepare("
-        SELECT 
-            type,
-            SUM(amount) as total
-        FROM cash_movements
-        WHERE shift_id = :shift_id
-        GROUP BY type
-    ");
+    // Get cash movements (if table exists)
+    $cashIn = 0;
+    $cashOut = 0;
     
-    $stmt->execute(['shift_id' => $shift['id']]);
-    $movements = $stmt->fetchAll(PDO::FETCH_KEY_PAIR);
-    
-    $cashIn = (float)($movements['cash_in'] ?? 0);
-    $cashOut = (float)($movements['cash_out'] ?? 0);
+    try {
+        $stmt = $pdo->prepare("
+            SELECT 
+                type,
+                SUM(amount) as total
+            FROM cash_movements
+            WHERE shift_id = :shift_id
+            GROUP BY type
+        ");
+        
+        $stmt->execute(['shift_id' => $shift['id']]);
+        $movements = $stmt->fetchAll(PDO::FETCH_KEY_PAIR);
+        
+        $cashIn = (float)($movements['cash_in'] ?? 0);
+        $cashOut = (float)($movements['cash_out'] ?? 0);
+    } catch (PDOException $e) {
+        // Table might not exist, ignore
+    }
     
     // Calculate expected cash
-    $expectedCash = (float)$shift['opening_cash'] 
-                  + (float)($shift['cash_sales'] ?? 0) 
-                  + $cashIn 
+    $expectedCash = $openingCash
+                  + (float)($shift['cash_sales'] ?? 0)
+                  + $cashIn
                   - $cashOut;
     
-    json_response([
+    // Build response
+    $response = [
         'success' => true,
         'has_shift' => true,
         'shift' => [
             'id' => (int)$shift['id'],
             'shift_number' => $shift['shift_number'],
-            'cashier_id' => (int)$shift['cashier_id'],
+            'cashier_id' => (int)$shift['started_by'],
             'cashier_name' => $shift['cashier_name'],
-            'station_id' => (int)$shift['station_id'],
-            'station_name' => $shift['station_name'],
-            'opened_at' => $shift['opened_at'],
-            'opening_cash' => (float)$shift['opening_cash'],
+            'station_id' => $stationId,
+            'station_name' => $shift['station_name'] ?? 'Station ' . $stationId,
+            'opened_at' => $shift['started_at'],
+            'opening_cash' => round($openingCash, 2),
             'status' => $shift['status'],
             'duration' => [
                 'hours' => $hours,
@@ -187,18 +226,29 @@ try {
         ],
         'statistics' => [
             'total_orders' => (int)($shift['total_orders'] ?? 0),
-            'total_sales' => (float)($shift['total_sales'] ?? 0),
-            'cash_sales' => (float)($shift['cash_sales'] ?? 0),
-            'card_sales' => (float)($shift['card_sales'] ?? 0),
-            'other_sales' => (float)($shift['other_sales'] ?? 0),
+            'total_sales' => round((float)($shift['total_sales'] ?? 0), 2),
+            'cash_sales' => round((float)($shift['cash_sales'] ?? 0), 2),
+            'card_sales' => round((float)($shift['card_sales'] ?? 0), 2),
+            'other_sales' => round((float)($shift['other_sales'] ?? 0), 2),
             'cash_movements' => [
-                'in' => $cashIn,
-                'out' => $cashOut
+                'in' => round($cashIn, 2),
+                'out' => round($cashOut, 2)
             ],
-            'expected_cash' => $expectedCash
+            'expected_cash' => round($expectedCash, 2)
         ],
-        'recent_orders' => $recentOrders
-    ]);
+        'recent_orders' => array_map(function($order) {
+            return [
+                'id' => (int)$order['id'],
+                'receipt' => $order['receipt_reference'],
+                'amount' => round((float)$order['total_amount'], 2),
+                'payment_method' => $order['payment_method'] ?? 'cash',
+                'status' => $order['payment_status'],
+                'created_at' => $order['created_at']
+            ];
+        }, $recentOrders)
+    ];
+    
+    json_response($response);
     
 } catch (PDOException $e) {
     error_log('Get current shift DB error: ' . $e->getMessage());
