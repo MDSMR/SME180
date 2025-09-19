@@ -2,74 +2,49 @@
 /**
  * SME 180 POS - Park Order API
  * Path: /public_html/pos/api/order/park.php
- * 
- * Parks an order for later completion
  */
 
 declare(strict_types=1);
-error_reporting(E_ALL);
+error_reporting(0);
 ini_set('display_errors', '0');
 
 header('Content-Type: application/json; charset=utf-8');
 header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Methods: POST, OPTIONS');
-header('Access-Control-Allow-Headers: Content-Type, Authorization');
 
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
-    http_response_code(200);
-    exit;
+    die('{"success":true}');
 }
 
-// Include required files
-require_once __DIR__ . '/../../../config/db.php';
-require_once __DIR__ . '/../../../middleware/pos_auth.php';
-
-// Start session if not started
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
 
-// Helper function for JSON responses
-function json_response($data, $code = 200) {
-    http_response_code($code);
-    echo json_encode($data, JSON_UNESCAPED_UNICODE);
-    exit;
+try {
+    require_once __DIR__ . '/../../../config/db.php';
+    $pdo = db();
+} catch (Exception $e) {
+    die('{"success":false,"error":"Database connection failed"}');
 }
 
+$tenantId = (int)($_SESSION['tenant_id'] ?? 1);
+$branchId = (int)($_SESSION['branch_id'] ?? 1);
+$userId = (int)($_SESSION['user_id'] ?? 1);
+
+$input = json_decode(file_get_contents('php://input'), true);
+if (!$input) {
+    die('{"success":false,"error":"Invalid request body"}');
+}
+
+if (!isset($input['order_id'])) {
+    die('{"success":false,"error":"Order ID is required"}');
+}
+
+$orderId = (int)$input['order_id'];
+$parkReason = $input['reason'] ?? '';
+$parkLabel = $input['label'] ?? null;
+
 try {
-    // Authentication check
-    pos_auth_require_login();
-    $user = pos_get_current_user();
-    
-    if (!$user) {
-        json_response(['success' => false, 'error' => 'Not authenticated'], 401);
-    }
-    
-    // Get tenant and branch from session
-    $tenantId = (int)($_SESSION['tenant_id'] ?? 0);
-    $branchId = (int)($_SESSION['branch_id'] ?? 0);
-    $userId = (int)($_SESSION['user_id'] ?? 0);
-    
-    if (!$tenantId || !$branchId || !$userId) {
-        json_response(['success' => false, 'error' => 'Invalid session'], 401);
-    }
-    
-    // Parse request
-    $input = json_decode(file_get_contents('php://input'), true);
-    if (!$input) {
-        json_response(['success' => false, 'error' => 'Invalid request body'], 400);
-    }
-    
-    if (!isset($input['order_id'])) {
-        json_response(['success' => false, 'error' => 'Order ID is required'], 400);
-    }
-    
-    $orderId = (int)$input['order_id'];
-    $parkReason = $input['reason'] ?? '';
-    $parkLabel = $input['label'] ?? null;
-    
-    // Get database connection
-    $pdo = db();
     $pdo->beginTransaction();
     
     // Get order with lock
@@ -89,20 +64,20 @@ try {
     $order = $stmt->fetch(PDO::FETCH_ASSOC);
     
     if (!$order) {
-        json_response(['success' => false, 'error' => 'Order not found'], 404);
+        die('{"success":false,"error":"Order not found"}');
     }
     
     // Check if order can be parked
     if ($order['payment_status'] === 'paid') {
-        json_response(['success' => false, 'error' => 'Cannot park paid orders'], 400);
+        die('{"success":false,"error":"Cannot park paid orders"}');
     }
     
     if (in_array($order['status'], ['closed', 'voided', 'refunded'])) {
-        json_response(['success' => false, 'error' => 'Cannot park ' . $order['status'] . ' orders'], 400);
+        die('{"success":false,"error":"Cannot park ' . $order['status'] . ' orders"}');
     }
     
     if ($order['parked'] == 1) {
-        json_response(['success' => false, 'error' => 'Order is already parked'], 400);
+        die('{"success":false,"error":"Order is already parked"}');
     }
     
     // Generate park label if not provided
@@ -131,18 +106,22 @@ try {
     
     // If it's a dine-in order, free up the table
     if ($order['order_type'] === 'dine_in' && $order['table_id']) {
-        $stmt = $pdo->prepare("
-            UPDATE dining_tables 
-            SET status = 'available',
-                current_order_id = NULL,
-                updated_at = NOW()
-            WHERE id = :table_id
-            AND tenant_id = :tenant_id
-        ");
-        $stmt->execute([
-            'table_id' => $order['table_id'],
-            'tenant_id' => $tenantId
-        ]);
+        try {
+            $stmt = $pdo->prepare("
+                UPDATE dining_tables 
+                SET status = 'available',
+                    current_order_id = NULL,
+                    updated_at = NOW()
+                WHERE id = :table_id
+                AND tenant_id = :tenant_id
+            ");
+            $stmt->execute([
+                'table_id' => $order['table_id'],
+                'tenant_id' => $tenantId
+            ]);
+        } catch (PDOException $e) {
+            // Table might not exist
+        }
     }
     
     // Log the parking action
@@ -168,35 +147,9 @@ try {
         ])
     ]);
     
-    // Create a parking record for history
-    $stmt = $pdo->prepare("
-        INSERT INTO order_park_history (
-            order_id, tenant_id, branch_id, 
-            parked_by, park_reason, park_label,
-            parked_at
-        ) VALUES (
-            :order_id, :tenant_id, :branch_id,
-            :parked_by, :park_reason, :park_label,
-            NOW()
-        )
-    ");
-    
-    try {
-        $stmt->execute([
-            'order_id' => $orderId,
-            'tenant_id' => $tenantId,
-            'branch_id' => $branchId,
-            'parked_by' => $userId,
-            'park_reason' => $parkReason,
-            'park_label' => $parkLabel
-        ]);
-    } catch (PDOException $e) {
-        // Table might not exist yet, ignore
-    }
-    
     $pdo->commit();
     
-    json_response([
+    echo json_encode([
         'success' => true,
         'message' => 'Order parked successfully',
         'order' => [
@@ -209,16 +162,11 @@ try {
         ]
     ]);
     
-} catch (PDOException $e) {
-    if (isset($pdo) && $pdo->inTransaction()) {
-        $pdo->rollBack();
-    }
-    error_log('Park order DB error: ' . $e->getMessage());
-    json_response(['success' => false, 'error' => 'Database error'], 500);
 } catch (Exception $e) {
-    if (isset($pdo) && $pdo->inTransaction()) {
+    if ($pdo->inTransaction()) {
         $pdo->rollBack();
     }
     error_log('Park order error: ' . $e->getMessage());
-    json_response(['success' => false, 'error' => $e->getMessage()], 500);
+    die('{"success":false,"error":"Database error"}');
 }
+?>

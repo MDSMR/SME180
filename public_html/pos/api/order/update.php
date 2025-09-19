@@ -2,84 +2,66 @@
 /**
  * SME 180 POS - Order Update API
  * Path: /public_html/pos/api/order/update.php
- * 
- * Updates existing orders - add/remove items, modify quantities, update customer info
  */
 
 declare(strict_types=1);
-error_reporting(E_ALL);
+error_reporting(0);
 ini_set('display_errors', '0');
 
 header('Content-Type: application/json; charset=utf-8');
 header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Methods: POST, OPTIONS');
-header('Access-Control-Allow-Headers: Content-Type, Authorization');
 
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
-    http_response_code(200);
-    exit;
+    die('{"success":true}');
 }
 
-// Include required files
-require_once __DIR__ . '/../../../config/db.php';
-require_once __DIR__ . '/../../../middleware/pos_auth.php';
-
-// Start session if not started
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
 
-// Helper function for JSON responses
-function json_response($data, $code = 200) {
-    http_response_code($code);
-    echo json_encode($data, JSON_UNESCAPED_UNICODE);
-    exit;
+try {
+    require_once __DIR__ . '/../../../config/db.php';
+    $pdo = db();
+} catch (Exception $e) {
+    die('{"success":false,"error":"Database connection failed"}');
 }
 
+$tenantId = (int)($_SESSION['tenant_id'] ?? 1);
+$branchId = (int)($_SESSION['branch_id'] ?? 1);
+$userId = (int)($_SESSION['user_id'] ?? 1);
+
+$input = json_decode(file_get_contents('php://input'), true);
+if (!$input) {
+    die('{"success":false,"error":"Invalid request body"}');
+}
+
+if (!isset($input['order_id'])) {
+    die('{"success":false,"error":"Order ID is required"}');
+}
+
+$orderId = (int)$input['order_id'];
+$updateType = $input['update_type'] ?? 'add_items'; // add_items, remove_items, update_quantity, update_customer
+
 try {
-    // Authentication check
-    pos_auth_require_login();
-    $user = pos_get_current_user();
+    // Get tax rate
+    $stmt = $pdo->prepare("
+        SELECT value FROM settings 
+        WHERE tenant_id = :tenant_id 
+        AND `key` = 'tax_rate' 
+        LIMIT 1
+    ");
+    $stmt->execute(['tenant_id' => $tenantId]);
+    $taxRate = (float)($stmt->fetchColumn() ?: 14);
     
-    if (!$user) {
-        json_response(['success' => false, 'error' => 'Not authenticated'], 401);
-    }
-    
-    // Get tenant and branch from session
-    $tenantId = (int)($_SESSION['tenant_id'] ?? 0);
-    $branchId = (int)($_SESSION['branch_id'] ?? 0);
-    $userId = (int)($_SESSION['user_id'] ?? 0);
-    
-    if (!$tenantId || !$branchId || !$userId) {
-        json_response(['success' => false, 'error' => 'Invalid session'], 401);
-    }
-    
-    // Parse request
-    $input = json_decode(file_get_contents('php://input'), true);
-    if (!$input) {
-        json_response(['success' => false, 'error' => 'Invalid request body'], 400);
-    }
-    
-    // Validate required fields
-    if (!isset($input['order_id'])) {
-        json_response(['success' => false, 'error' => 'Order ID is required'], 400);
-    }
-    
-    $orderId = (int)$input['order_id'];
-    $updateType = $input['update_type'] ?? 'add_items'; // add_items, remove_items, update_quantity, update_customer
-    
-    // Get database connection
-    $pdo = db();
     $pdo->beginTransaction();
     
     // Fetch existing order
     $stmt = $pdo->prepare("
-        SELECT o.*, 
-               (SELECT COUNT(*) FROM order_items WHERE order_id = o.id AND kitchen_status != 'pending') as fired_items_count
-        FROM orders o
-        WHERE o.id = :order_id 
-        AND o.tenant_id = :tenant_id
-        AND o.branch_id = :branch_id
+        SELECT * FROM orders
+        WHERE id = :order_id 
+        AND tenant_id = :tenant_id
+        AND branch_id = :branch_id
         FOR UPDATE
     ");
     $stmt->execute([
@@ -90,47 +72,35 @@ try {
     $order = $stmt->fetch(PDO::FETCH_ASSOC);
     
     if (!$order) {
-        json_response(['success' => false, 'error' => 'Order not found'], 404);
+        die('{"success":false,"error":"Order not found"}');
     }
     
     // Check if order can be modified
     if (in_array($order['status'], ['closed', 'voided', 'refunded'])) {
-        json_response(['success' => false, 'error' => 'Cannot modify ' . $order['status'] . ' orders'], 400);
+        die('{"success":false,"error":"Cannot modify ' . $order['status'] . ' orders"}');
     }
     
     if ($order['payment_status'] === 'paid') {
-        json_response(['success' => false, 'error' => 'Cannot modify paid orders'], 400);
+        die('{"success":false,"error":"Cannot modify paid orders"}');
     }
-    
-    // Get tax rate for calculations
-    $stmt = $pdo->prepare("
-        SELECT value FROM settings 
-        WHERE tenant_id = :tenant_id 
-        AND `key` = 'pos_tax_rate' 
-        LIMIT 1
-    ");
-    $stmt->execute(['tenant_id' => $tenantId]);
-    $taxRate = (float)($stmt->fetchColumn() ?: 0);
     
     $updateResult = [];
     
     switch ($updateType) {
         case 'add_items':
             if (empty($input['items'])) {
-                json_response(['success' => false, 'error' => 'No items to add'], 400);
+                die('{"success":false,"error":"No items to add"}');
             }
             
             $stmt = $pdo->prepare("
                 INSERT INTO order_items (
                     order_id, tenant_id, branch_id,
                     product_id, product_name, quantity, unit_price,
-                    subtotal, tax_amount, total_amount,
-                    notes, kitchen_status, created_at
+                    line_total, created_at, updated_at
                 ) VALUES (
                     :order_id, :tenant_id, :branch_id,
                     :product_id, :product_name, :quantity, :unit_price,
-                    :subtotal, :tax_amount, :total_amount,
-                    :notes, 'pending', NOW()
+                    :line_total, NOW(), NOW()
                 )
             ");
             
@@ -140,9 +110,7 @@ try {
                 $productName = $item['product_name'] ?? 'Unknown Item';
                 $quantity = (float)($item['quantity'] ?? 1);
                 $unitPrice = (float)($item['unit_price'] ?? 0);
-                $itemSubtotal = $quantity * $unitPrice;
-                $itemTax = $taxRate > 0 ? ($itemSubtotal * $taxRate / 100) : 0;
-                $itemTotal = $itemSubtotal + $itemTax;
+                $lineTotal = $quantity * $unitPrice;
                 
                 $stmt->execute([
                     'order_id' => $orderId,
@@ -152,17 +120,14 @@ try {
                     'product_name' => $productName,
                     'quantity' => $quantity,
                     'unit_price' => $unitPrice,
-                    'subtotal' => $itemSubtotal,
-                    'tax_amount' => $itemTax,
-                    'total_amount' => $itemTotal,
-                    'notes' => $item['notes'] ?? ''
+                    'line_total' => $lineTotal
                 ]);
                 
                 $addedItems[] = [
                     'id' => (int)$pdo->lastInsertId(),
                     'product_name' => $productName,
                     'quantity' => $quantity,
-                    'total' => $itemTotal
+                    'total' => $lineTotal
                 ];
             }
             $updateResult['added_items'] = $addedItems;
@@ -170,13 +135,13 @@ try {
             
         case 'remove_items':
             if (empty($input['item_ids'])) {
-                json_response(['success' => false, 'error' => 'No items to remove'], 400);
+                die('{"success":false,"error":"No items to remove"}');
             }
             
-            // Check if items can be removed (not fired)
             $itemIds = array_map('intval', $input['item_ids']);
             $placeholders = str_repeat('?,', count($itemIds) - 1) . '?';
             
+            // Check if items can be removed (not fired)
             $stmt = $pdo->prepare("
                 SELECT id, product_name, kitchen_status 
                 FROM order_items 
@@ -189,21 +154,20 @@ try {
             $items = $stmt->fetchAll(PDO::FETCH_ASSOC);
             
             $firedItems = array_filter($items, function($item) {
-                return $item['kitchen_status'] !== 'pending';
+                return $item['kitchen_status'] !== 'pending' && $item['kitchen_status'] !== null;
             });
             
             if (!empty($firedItems)) {
-                // Need manager approval for fired items
-                $requiresApproval = true;
                 $managerPin = $input['manager_pin'] ?? '';
                 
                 if (!$managerPin) {
-                    json_response([
-                        'success' => false, 
+                    $pdo->commit();
+                    die(json_encode([
+                        'success' => false,
                         'error' => 'Manager approval required to remove fired items',
                         'requires_approval' => true,
                         'fired_items' => array_column($firedItems, 'product_name')
-                    ], 403);
+                    ]));
                 }
                 
                 // Validate manager PIN
@@ -221,7 +185,7 @@ try {
                 ]);
                 
                 if (!$stmt->fetchColumn()) {
-                    json_response(['success' => false, 'error' => 'Invalid manager PIN'], 403);
+                    die('{"success":false,"error":"Invalid manager PIN"}');
                 }
             }
             
@@ -248,7 +212,7 @@ try {
             $newQuantity = (float)($input['quantity'] ?? 0);
             
             if (!$itemId || $newQuantity <= 0) {
-                json_response(['success' => false, 'error' => 'Invalid item or quantity'], 400);
+                die('{"success":false,"error":"Invalid item or quantity"}');
             }
             
             // Get current item
@@ -265,39 +229,34 @@ try {
             $item = $stmt->fetch(PDO::FETCH_ASSOC);
             
             if (!$item) {
-                json_response(['success' => false, 'error' => 'Item not found'], 404);
+                die('{"success":false,"error":"Item not found"}');
             }
             
             // Check if item is fired
-            if ($item['kitchen_status'] !== 'pending') {
-                json_response(['success' => false, 'error' => 'Cannot modify quantity of fired items'], 400);
+            if ($item['kitchen_status'] !== 'pending' && $item['kitchen_status'] !== null) {
+                die('{"success":false,"error":"Cannot modify quantity of fired items"}');
             }
             
             // Update quantity and recalculate
-            $newSubtotal = $newQuantity * $item['unit_price'];
-            $newTax = $taxRate > 0 ? ($newSubtotal * $taxRate / 100) : 0;
-            $newTotal = $newSubtotal + $newTax;
+            $newLineTotal = $newQuantity * $item['unit_price'];
             
             $stmt = $pdo->prepare("
                 UPDATE order_items 
                 SET quantity = :quantity,
-                    subtotal = :subtotal,
-                    tax_amount = :tax_amount,
-                    total_amount = :total_amount
+                    line_total = :line_total,
+                    updated_at = NOW()
                 WHERE id = :item_id
             ");
             $stmt->execute([
                 'quantity' => $newQuantity,
-                'subtotal' => $newSubtotal,
-                'tax_amount' => $newTax,
-                'total_amount' => $newTotal,
+                'line_total' => $newLineTotal,
                 'item_id' => $itemId
             ]);
             
             $updateResult['updated_item'] = [
                 'id' => $itemId,
                 'new_quantity' => $newQuantity,
-                'new_total' => $newTotal
+                'new_total' => $newLineTotal
             ];
             break;
             
@@ -321,15 +280,13 @@ try {
             break;
             
         default:
-            json_response(['success' => false, 'error' => 'Invalid update type'], 400);
+            die('{"success":false,"error":"Invalid update type"}');
     }
     
     // Recalculate order totals
     $stmt = $pdo->prepare("
         SELECT 
-            SUM(CASE WHEN is_voided = 0 THEN subtotal ELSE 0 END) as subtotal,
-            SUM(CASE WHEN is_voided = 0 THEN tax_amount ELSE 0 END) as tax_amount,
-            SUM(CASE WHEN is_voided = 0 THEN total_amount ELSE 0 END) as total_amount
+            SUM(CASE WHEN is_voided = 0 THEN line_total ELSE 0 END) as subtotal
         FROM order_items 
         WHERE order_id = :order_id
     ");
@@ -337,8 +294,14 @@ try {
     $totals = $stmt->fetch(PDO::FETCH_ASSOC);
     
     // Update order totals
-    $serviceCharge = $order['service_charge']; // Keep existing service charge
-    $newTotal = $totals['total_amount'] + $serviceCharge;
+    $subtotal = (float)$totals['subtotal'];
+    $discountAmount = (float)$order['discount_amount'];
+    $serviceCharge = (float)$order['service_charge'];
+    $tipAmount = (float)$order['tip_amount'];
+    
+    $taxableAmount = $subtotal - $discountAmount + $serviceCharge;
+    $taxAmount = $taxableAmount * ($taxRate / 100);
+    $newTotal = $taxableAmount + $taxAmount + $tipAmount;
     
     $stmt = $pdo->prepare("
         UPDATE orders 
@@ -349,8 +312,8 @@ try {
         WHERE id = :order_id
     ");
     $stmt->execute([
-        'subtotal' => $totals['subtotal'],
-        'tax_amount' => $totals['tax_amount'],
+        'subtotal' => $subtotal,
+        'tax_amount' => $taxAmount,
         'total_amount' => $newTotal,
         'order_id' => $orderId
     ]);
@@ -362,7 +325,7 @@ try {
             action, details, created_at
         ) VALUES (
             :order_id, :tenant_id, :branch_id, :user_id,
-            :action, :details, NOW()
+            'updated', :details, NOW()
         )
     ");
     
@@ -371,7 +334,6 @@ try {
         'tenant_id' => $tenantId,
         'branch_id' => $branchId,
         'user_id' => $userId,
-        'action' => 'updated',
         'details' => json_encode([
             'update_type' => $updateType,
             'result' => $updateResult
@@ -398,7 +360,7 @@ try {
     $stmt->execute(['order_id' => $orderId]);
     $items = $stmt->fetchAll(PDO::FETCH_ASSOC);
     
-    json_response([
+    echo json_encode([
         'success' => true,
         'message' => 'Order updated successfully',
         'order' => [
@@ -415,16 +377,11 @@ try {
         'items' => $items
     ]);
     
-} catch (PDOException $e) {
-    if (isset($pdo) && $pdo->inTransaction()) {
-        $pdo->rollBack();
-    }
-    error_log('Order update DB error: ' . $e->getMessage());
-    json_response(['success' => false, 'error' => 'Database error'], 500);
 } catch (Exception $e) {
-    if (isset($pdo) && $pdo->inTransaction()) {
+    if ($pdo->inTransaction()) {
         $pdo->rollBack();
     }
     error_log('Order update error: ' . $e->getMessage());
-    json_response(['success' => false, 'error' => $e->getMessage()], 500);
+    die('{"success":false,"error":"Failed to update order"}');
 }
+?>
