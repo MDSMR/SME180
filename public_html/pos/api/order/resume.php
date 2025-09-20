@@ -1,15 +1,25 @@
 <?php
 /**
- * SME 180 POS - Resume Order API
+ * SME 180 POS - Resume Order API (Production Ready)
  * Path: /public_html/pos/api/order/resume.php
- * Version: 2.0.0 - Production Ready
+ * Version: 6.0.0 - Production Final
  */
 
 declare(strict_types=1);
+
+// Production settings
 error_reporting(0);
 ini_set('display_errors', '0');
 ini_set('log_errors', '1');
 ini_set('error_log', __DIR__ . '/../../../logs/pos_errors.log');
+
+// Configuration
+define('API_TEST_MODE', false); // SET TO false IN PRODUCTION
+define('MAX_REQUEST_SIZE', 10000);
+define('RATE_LIMIT_PER_MINUTE', 30);
+
+// Performance monitoring
+$startTime = microtime(true);
 
 // Security headers
 header('Content-Type: application/json; charset=utf-8');
@@ -21,473 +31,331 @@ header('X-XSS-Protection: 1; mode=block');
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     header('Access-Control-Allow-Methods: GET, POST, OPTIONS');
     header('Access-Control-Allow-Headers: Content-Type, Authorization');
-    http_response_code(200);
-    die('{"success":true}');
+    http_response_code(204);
+    exit;
 }
 
 // Only allow GET and POST
 if (!in_array($_SERVER['REQUEST_METHOD'], ['GET', 'POST'])) {
     http_response_code(405);
-    die('{"success":false,"error":"Method not allowed","code":"METHOD_NOT_ALLOWED"}');
+    die(json_encode([
+        'success' => false,
+        'error' => 'Method not allowed',
+        'code' => 'METHOD_NOT_ALLOWED'
+    ]));
 }
 
-// Start session
-if (session_status() === PHP_SESSION_NONE) {
-    session_start();
-}
-
-// Helper functions
-function logEvent($level, $message, $context = []) {
-    $logEntry = [
-        'timestamp' => date('c'),
-        'level' => $level,
-        'message' => $message,
-        'context' => $context,
-        'request_id' => $_SERVER['REQUEST_TIME_FLOAT'] ?? null
-    ];
-    error_log('[SME180] ' . json_encode($logEntry));
-}
-
-function sendError($message, $code = 400, $errorCode = 'GENERAL_ERROR', $additionalData = []) {
+/**
+ * Send error response
+ */
+function sendError(string $message, int $code = 400, string $errorCode = 'ERROR'): void {
+    global $startTime;
+    
+    error_log("[SME180 Resume] $errorCode: $message");
+    
     http_response_code($code);
-    $response = array_merge(
-        [
-            'success' => false,
-            'error' => $message,
-            'code' => $errorCode,
-            'timestamp' => date('c')
-        ],
-        $additionalData
-    );
-    echo json_encode($response, JSON_UNESCAPED_UNICODE);
-    exit;
+    die(json_encode([
+        'success' => false,
+        'error' => $message,
+        'code' => $errorCode,
+        'timestamp' => date('c'),
+        'processing_time' => round((microtime(true) - $startTime) * 1000, 2) . 'ms'
+    ], JSON_UNESCAPED_UNICODE));
 }
 
-function sendSuccess($data) {
+/**
+ * Send success response
+ */
+function sendSuccess(array $data): void {
+    global $startTime;
+    
     echo json_encode(array_merge(
         ['success' => true],
         $data,
-        ['timestamp' => date('c')]
+        [
+            'timestamp' => date('c'),
+            'processing_time' => round((microtime(true) - $startTime) * 1000, 2) . 'ms'
+        ]
     ), JSON_UNESCAPED_UNICODE | JSON_PRESERVE_ZERO_FRACTION);
     exit;
 }
 
-// Load configuration
+// Load database and auth
+require_once __DIR__ . '/../../../config/db.php';
+require_once __DIR__ . '/../../../middleware/auth_login.php';
+
 try {
-    require_once __DIR__ . '/../../../config/db.php';
     $pdo = db();
+    if (!$pdo) {
+        throw new Exception('Database connection not available');
+    }
 } catch (Exception $e) {
-    logEvent('ERROR', 'Database connection failed', ['error' => $e->getMessage()]);
-    sendError('Database connection failed', 503, 'DB_CONNECTION_ERROR');
+    sendError('Service temporarily unavailable', 503, 'DATABASE_ERROR');
 }
 
-// Session validation
-$tenantId = isset($_SESSION['tenant_id']) ? (int)$_SESSION['tenant_id'] : null;
-$branchId = isset($_SESSION['branch_id']) ? (int)$_SESSION['branch_id'] : null;
-$userId = isset($_SESSION['user_id']) ? (int)$_SESSION['user_id'] : null;
-
-// Use defaults with warning
-if (!$tenantId) {
-    $tenantId = 1;
-    logEvent('WARNING', 'No tenant_id in session, using default', ['session_id' => session_id()]);
-}
-if (!$branchId) {
-    $branchId = 1;
-    logEvent('WARNING', 'No branch_id in session, using default', ['session_id' => session_id()]);
-}
-if (!$userId) {
-    $userId = 1;
-    logEvent('WARNING', 'No user_id in session, using default', ['session_id' => session_id()]);
+// Parse input for POST
+$input = [];
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $rawInput = file_get_contents('php://input');
+    if (strlen($rawInput) > MAX_REQUEST_SIZE) {
+        sendError('Request too large', 413, 'REQUEST_TOO_LARGE');
+    }
+    
+    if (!empty($rawInput)) {
+        $input = json_decode($rawInput, true);
+        if (json_last_error() !== JSON_ERROR_NONE) {
+            sendError('Invalid JSON', 400, 'INVALID_JSON');
+        }
+    }
 }
 
-// Get currency from settings
-$stmt = $pdo->prepare("
-    SELECT value FROM settings 
-    WHERE tenant_id = :tenant_id 
-    AND `key` IN ('currency_symbol', 'currency_code', 'currency')
-    LIMIT 1
-");
-$stmt->execute(['tenant_id' => $tenantId]);
-$currency = $stmt->fetchColumn() ?: 'EGP';
+// Authentication
+use_backend_session();
+$authenticated = false;
+$tenantId = null;
+$branchId = null;
+$userId = null;
 
-// Check if it's a GET request (list parked orders)
+$user = auth_user();
+if ($user) {
+    $authenticated = true;
+    $tenantId = auth_get_tenant_id();
+    $branchId = auth_get_branch_id();
+    $userId = (int)($user['id'] ?? 0);
+}
+
+// Test mode fallback - REMOVE IN PRODUCTION
+if (!$authenticated && API_TEST_MODE) {
+    $tenantId = isset($input['tenant_id']) ? (int)$input['tenant_id'] : 1;
+    $branchId = isset($input['branch_id']) ? (int)$input['branch_id'] : 1;
+    $userId = isset($input['user_id']) ? (int)$input['user_id'] : 1;
+} elseif (!$authenticated) {
+    sendError('Authentication required', 401, 'UNAUTHORIZED');
+}
+
+// Get currency
+$currency = 'EGP';
+try {
+    $stmt = $pdo->prepare("SELECT value FROM settings WHERE tenant_id = ? AND `key` IN ('currency','currency_symbol') LIMIT 1");
+    $stmt->execute([$tenantId]);
+    $result = $stmt->fetchColumn();
+    if ($result) $currency = $result;
+} catch (Exception $e) {}
+
+// Handle GET - List parked orders
 if ($_SERVER['REQUEST_METHOD'] === 'GET') {
     try {
-        // Check for pagination parameters
-        $page = isset($_GET['page']) ? 
-            filter_var($_GET['page'], FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]) : 1;
-        $limit = isset($_GET['limit']) ? 
-            filter_var($_GET['limit'], FILTER_VALIDATE_INT, ['options' => ['min_range' => 1, 'max_range' => 100]]) : 20;
-        
-        if ($page === false) $page = 1;
-        if ($limit === false) $limit = 20;
-        
-        $offset = ($page - 1) * $limit;
-        
-        // Get total count
+        // Get parked orders with strict filtering
         $stmt = $pdo->prepare("
-            SELECT COUNT(*) as total
-            FROM orders
-            WHERE tenant_id = :tenant_id
-            AND branch_id = :branch_id
-            AND parked = 1
-            AND status = 'held'
+            SELECT o.id, o.receipt_reference, o.park_label, o.parked_at, 
+                   o.total_amount, o.customer_name, o.customer_phone,
+                   o.order_type, o.table_id, o.parked, o.status,
+                   dt.table_number,
+                   COUNT(oi.id) as item_count,
+                   SUM(oi.quantity) as total_quantity
+            FROM orders o
+            LEFT JOIN dining_tables dt ON dt.id = o.table_id
+            LEFT JOIN order_items oi ON oi.order_id = o.id
+            WHERE o.tenant_id = :tenant_id 
+            AND o.branch_id = :branch_id 
+            AND o.parked = 1
+            AND o.status = 'held'
+            AND o.park_label IS NOT NULL
+            GROUP BY o.id
+            ORDER BY o.parked_at DESC
         ");
         $stmt->execute([
             'tenant_id' => $tenantId,
             'branch_id' => $branchId
         ]);
-        $totalCount = $stmt->fetchColumn();
+        $allOrders = $stmt->fetchAll(PDO::FETCH_ASSOC);
         
-        // Check if parked_at column exists
-        $hasParkedAt = false;
-        try {
-            $checkCol = $pdo->query("SHOW COLUMNS FROM orders LIKE 'parked_at'");
-            $hasParkedAt = ($checkCol->rowCount() > 0);
-        } catch (Exception $e) {
-            $hasParkedAt = false;
+        // Double-check filtering for safety
+        $parkedOrders = [];
+        foreach ($allOrders as $order) {
+            if ($order['parked'] == 1 && $order['status'] == 'held') {
+                $parkedOrders[] = [
+                    'id' => (int)$order['id'],
+                    'receipt_reference' => $order['receipt_reference'],
+                    'park_label' => $order['park_label'],
+                    'parked_at' => $order['parked_at'],
+                    'total_amount' => (float)$order['total_amount'],
+                    'currency' => $currency,
+                    'customer_name' => $order['customer_name'],
+                    'customer_phone' => $order['customer_phone'],
+                    'order_type' => $order['order_type'],
+                    'table_number' => $order['table_number'],
+                    'item_count' => (int)$order['item_count'],
+                    'total_quantity' => (float)$order['total_quantity']
+                ];
+            }
         }
         
-        // Build query based on available columns
-        $orderBy = $hasParkedAt ? "o.parked_at DESC" : "o.updated_at DESC";
-        $parkedAtField = $hasParkedAt ? "o.parked_at" : "o.updated_at as parked_at";
-        
-        // Get parked orders with pagination
-        $stmt = $pdo->prepare("
-            SELECT 
-                o.id,
-                o.receipt_reference,
-                o.park_label,
-                $parkedAtField,
-                o.total_amount,
-                o.order_type,
-                o.customer_name,
-                o.customer_phone,
-                o.table_id,
-                o.notes,
-                dt.table_number,
-                COUNT(oi.id) as total_items,
-                SUM(CASE WHEN oi.is_voided = 0 THEN 1 ELSE 0 END) as active_items
-            FROM orders o
-            LEFT JOIN order_items oi ON oi.order_id = o.id
-            LEFT JOIN dining_tables dt ON dt.id = o.table_id
-            WHERE o.tenant_id = :tenant_id
-            AND o.branch_id = :branch_id
-            AND o.parked = 1
-            AND o.status = 'held'
-            GROUP BY o.id
-            ORDER BY $orderBy
-            LIMIT :limit OFFSET :offset
-        ");
-        
-        $stmt->bindValue(':tenant_id', $tenantId, PDO::PARAM_INT);
-        $stmt->bindValue(':branch_id', $branchId, PDO::PARAM_INT);
-        $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
-        $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
-        $stmt->execute();
-        
-        $parkedOrders = $stmt->fetchAll(PDO::FETCH_ASSOC);
-        
-        // Format response
-        $formattedOrders = array_map(function($order) use ($currency) {
-            return [
-                'id' => (int)$order['id'],
-                'receipt_reference' => $order['receipt_reference'],
-                'park_label' => $order['park_label'],
-                'parked_at' => $order['parked_at'],
-                'total_amount' => (float)$order['total_amount'],
-                'currency' => $currency,
-                'order_type' => $order['order_type'],
-                'customer_name' => $order['customer_name'],
-                'customer_phone' => $order['customer_phone'],
-                'table_number' => $order['table_number'],
-                'items_count' => (int)$order['active_items'],
-                'total_items' => (int)$order['total_items'],
-                'notes' => $order['notes']
-            ];
-        }, $parkedOrders);
-        
-        logEvent('INFO', 'Parked orders retrieved', [
-            'count' => count($parkedOrders),
-            'page' => $page,
-            'limit' => $limit
-        ]);
-        
         sendSuccess([
-            'parked_orders' => $formattedOrders,
-            'pagination' => [
-                'current_page' => $page,
-                'per_page' => $limit,
-                'total_count' => (int)$totalCount,
-                'total_pages' => ceil($totalCount / $limit),
-                'has_more' => ($offset + $limit) < $totalCount
-            ]
+            'parked_orders' => $parkedOrders,
+            'count' => count($parkedOrders)
         ]);
         
     } catch (Exception $e) {
-        logEvent('ERROR', 'Failed to retrieve parked orders', [
-            'error' => $e->getMessage(),
-            'trace' => $e->getTraceAsString()
-        ]);
-        sendError('Failed to retrieve parked orders', 500, 'RETRIEVE_FAILED');
-    }
-    exit;
-}
-
-// POST request - resume a specific order
-$rawInput = file_get_contents('php://input');
-if (strlen($rawInput) > 10000) { // 10KB max
-    sendError('Request too large', 413, 'REQUEST_TOO_LARGE');
-}
-
-if (empty($rawInput)) {
-    sendError('Request body is required', 400, 'EMPTY_REQUEST');
-}
-
-$input = json_decode($rawInput, true);
-if (json_last_error() !== JSON_ERROR_NONE) {
-    sendError('Invalid JSON format', 400, 'INVALID_JSON');
-}
-
-// Validate required fields
-if (!isset($input['order_id'])) {
-    sendError('Order ID is required', 400, 'MISSING_ORDER_ID');
-}
-
-$orderId = filter_var($input['order_id'], FILTER_VALIDATE_INT, [
-    'options' => ['min_range' => 1, 'max_range' => PHP_INT_MAX]
-]);
-
-if ($orderId === false) {
-    sendError('Invalid order ID format', 400, 'INVALID_ORDER_ID');
-}
-
-// Validate optional table ID
-$tableId = null;
-if (isset($input['table_id'])) {
-    $tableId = filter_var($input['table_id'], FILTER_VALIDATE_INT, [
-        'options' => ['min_range' => 1, 'max_range' => PHP_INT_MAX]
-    ]);
-    if ($tableId === false) {
-        sendError('Invalid table ID format', 400, 'INVALID_TABLE_ID');
+        error_log("[SME180 Resume] List failed: " . $e->getMessage());
+        sendError('Failed to list orders', 500, 'LIST_FAILED');
     }
 }
+
+// POST - Resume order
+$orderId = isset($input['order_id']) ? (int)$input['order_id'] : 0;
+if (!$orderId) {
+    sendError('Order ID required', 400, 'MISSING_ORDER_ID');
+}
+
+$tableId = isset($input['table_id']) ? (int)$input['table_id'] : null;
 
 try {
     $pdo->beginTransaction();
     
-    // Check if parked_at column exists
-    $hasParkedAt = false;
-    try {
-        $checkCol = $pdo->query("SHOW COLUMNS FROM orders LIKE 'parked_at'");
-        $hasParkedAt = ($checkCol->rowCount() > 0);
-    } catch (Exception $e) {
-        $hasParkedAt = false;
-    }
-    
-    // Get the parked order with lock
+    // Get parked order
     $stmt = $pdo->prepare("
         SELECT * FROM orders 
         WHERE id = :order_id 
-        AND tenant_id = :tenant_id
-        AND branch_id = :branch_id
         AND parked = 1
-        FOR UPDATE
+        AND status = 'held'
     ");
-    $stmt->execute([
-        'order_id' => $orderId,
-        'tenant_id' => $tenantId,
-        'branch_id' => $branchId
-    ]);
-    
+    $stmt->execute(['order_id' => $orderId]);
     $order = $stmt->fetch(PDO::FETCH_ASSOC);
     
     if (!$order) {
         $pdo->rollBack();
-        sendError('Parked order not found', 404, 'ORDER_NOT_FOUND');
-    }
-    
-    // Validate table if provided for dine-in orders
-    if ($tableId && $order['order_type'] === 'dine_in') {
-        // Check if table is available
-        $stmt = $pdo->prepare("
-            SELECT status, current_order_id 
-            FROM dining_tables 
-            WHERE id = :table_id 
-            AND tenant_id = :tenant_id
-            FOR UPDATE
-        ");
         
-        try {
-            $stmt->execute([
-                'table_id' => $tableId,
-                'tenant_id' => $tenantId
-            ]);
-            $table = $stmt->fetch(PDO::FETCH_ASSOC);
-            
-            if ($table && $table['status'] === 'occupied' && $table['current_order_id']) {
-                $pdo->rollBack();
-                sendError('Table is already occupied', 409, 'TABLE_OCCUPIED');
+        // Check why not found
+        $stmt = $pdo->prepare("SELECT id, parked, status FROM orders WHERE id = :order_id");
+        $stmt->execute(['order_id' => $orderId]);
+        $check = $stmt->fetch(PDO::FETCH_ASSOC);
+        
+        if ($check) {
+            if ($check['parked'] == 0) {
+                sendError('Order is not parked', 400, 'NOT_PARKED');
+            } elseif ($check['status'] != 'held') {
+                sendError('Order has wrong status: ' . $check['status'], 400, 'WRONG_STATUS');
             }
-        } catch (PDOException $e) {
-            // Table system might not be implemented
-            logEvent('INFO', 'Table validation skipped', ['error' => $e->getMessage()]);
         }
+        sendError('Order not found', 404, 'ORDER_NOT_FOUND');
     }
     
     // Calculate parked duration
     $parkedDuration = 0;
-    if ($hasParkedAt && $order['parked_at']) {
-        $parkedDuration = round((time() - strtotime($order['parked_at'])) / 60); // in minutes
-    }
-    
-    // Build update query based on available columns
-    $updateFields = [
-        "parked = 0",
-        "park_label = NULL",
-        "status = 'open'",
-        "table_id = :table_id",
-        "updated_at = NOW()"
-    ];
-    
-    if ($hasParkedAt) {
-        $updateFields[] = "parked_at = NULL";
+    if (!empty($order['parked_at'])) {
+        $parkedDuration = round((time() - strtotime($order['parked_at'])) / 60);
     }
     
     // Resume the order
     $stmt = $pdo->prepare("
         UPDATE orders 
-        SET " . implode(", ", $updateFields) . "
+        SET parked = 0,
+            park_label = NULL,
+            parked_at = NULL,
+            park_reason = NULL,
+            parked_by = NULL,
+            status = 'open',
+            table_id = :table_id,
+            resumed_at = NOW(),
+            resumed_by = :user_id,
+            updated_at = NOW()
         WHERE id = :order_id
+        AND parked = 1
     ");
     
-    $stmt->execute([
+    $result = $stmt->execute([
         'table_id' => $tableId ?: $order['table_id'],
+        'user_id' => $userId,
         'order_id' => $orderId
     ]);
     
-    // Update table status if dine-in
-    $tableAssigned = false;
+    if (!$result || $stmt->rowCount() == 0) {
+        $pdo->rollBack();
+        sendError('Failed to update order', 500, 'UPDATE_FAILED');
+    }
+    
+    // Update table if dine-in
     if ($order['order_type'] === 'dine_in' && ($tableId || $order['table_id'])) {
         try {
             $assignTableId = $tableId ?: $order['table_id'];
             $stmt = $pdo->prepare("
                 UPDATE dining_tables 
-                SET status = 'occupied',
-                    current_order_id = :order_id,
+                SET status = 'occupied', 
+                    current_order_id = :order_id, 
                     updated_at = NOW()
-                WHERE id = :table_id
-                AND tenant_id = :tenant_id
+                WHERE id = :table_id AND tenant_id = :tenant_id
             ");
             $stmt->execute([
                 'order_id' => $orderId,
                 'table_id' => $assignTableId,
                 'tenant_id' => $tenantId
             ]);
-            $tableAssigned = $stmt->rowCount() > 0;
-        } catch (PDOException $e) {
-            // Table system might not be implemented
-            logEvent('INFO', 'Table assignment skipped', ['error' => $e->getMessage()]);
+        } catch (Exception $e) {
+            // Table system may not exist
         }
     }
     
-    // Log the resume action
+    // Get items count
     $stmt = $pdo->prepare("
-        INSERT INTO order_logs (
-            order_id, tenant_id, branch_id, user_id,
-            action, details, created_at
-        ) VALUES (
-            :order_id, :tenant_id, :branch_id, :user_id,
-            'resumed', :details, NOW()
-        )
-    ");
-    
-    $logDetails = [
-        'park_label' => $order['park_label'],
-        'parked_duration_minutes' => $parkedDuration,
-        'table_id' => $tableId ?: $order['table_id'],
-        'table_assigned' => $tableAssigned,
-        'ip' => $_SERVER['REMOTE_ADDR'] ?? null
-    ];
-    
-    $stmt->execute([
-        'order_id' => $orderId,
-        'tenant_id' => $tenantId,
-        'branch_id' => $branchId,
-        'user_id' => $userId,
-        'details' => json_encode($logDetails)
-    ]);
-    
-    // Get order items for response
-    $stmt = $pdo->prepare("
-        SELECT 
-            oi.*,
-            COUNT(*) OVER() as total_items,
-            SUM(CASE WHEN is_voided = 0 THEN 1 ELSE 0 END) OVER() as active_items
-        FROM order_items oi
-        WHERE oi.order_id = :order_id 
-        ORDER BY oi.created_at ASC
+        SELECT COUNT(*) as total_items,
+               SUM(CASE WHEN is_voided = 0 THEN 1 ELSE 0 END) as active_items,
+               SUM(quantity) as total_quantity
+        FROM order_items 
+        WHERE order_id = :order_id
     ");
     $stmt->execute(['order_id' => $orderId]);
-    $items = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    $itemCounts = $stmt->fetch(PDO::FETCH_ASSOC);
     
-    $totalItems = $items[0]['total_items'] ?? 0;
-    $activeItems = $items[0]['active_items'] ?? 0;
+    // Audit log
+    try {
+        if ($pdo->query("SHOW TABLES LIKE 'order_logs'")->rowCount() > 0) {
+            $stmt = $pdo->prepare("
+                INSERT INTO order_logs (order_id, tenant_id, branch_id, user_id, action, details, created_at)
+                VALUES (:order_id, :tenant_id, :branch_id, :user_id, 'resumed', :details, NOW())
+            ");
+            $stmt->execute([
+                'order_id' => $orderId,
+                'tenant_id' => $tenantId,
+                'branch_id' => $branchId,
+                'user_id' => $userId,
+                'details' => json_encode([
+                    'park_label' => $order['park_label'],
+                    'parked_duration_minutes' => $parkedDuration,
+                    'table_id' => $tableId
+                ])
+            ]);
+        }
+    } catch (Exception $e) {
+        // Non-critical
+    }
     
     $pdo->commit();
-    
-    // Log successful resume
-    logEvent('INFO', 'Order resumed successfully', [
-        'order_id' => $orderId,
-        'receipt' => $order['receipt_reference'],
-        'parked_duration' => $parkedDuration,
-        'table_assigned' => $tableAssigned
-    ]);
     
     sendSuccess([
         'message' => 'Order resumed successfully',
         'order' => [
             'id' => $orderId,
             'receipt_reference' => $order['receipt_reference'],
+            'status' => 'open',
             'order_type' => $order['order_type'],
             'table_id' => $tableId ?: $order['table_id'],
             'customer_name' => $order['customer_name'],
-            'customer_phone' => $order['customer_phone'],
-            'subtotal' => (float)$order['subtotal'],
-            'tax_amount' => (float)$order['tax_amount'],
-            'service_charge' => (float)$order['service_charge'],
-            'discount_amount' => (float)$order['discount_amount'],
             'total_amount' => (float)$order['total_amount'],
             'currency' => $currency,
-            'status' => 'open',
             'parked_duration_minutes' => $parkedDuration,
-            'items_count' => (int)$activeItems,
-            'total_items' => (int)$totalItems
-        ],
-        'items' => array_map(function($item) {
-            return [
-                'id' => (int)$item['id'],
-                'product_id' => $item['product_id'] ? (int)$item['product_id'] : null,
-                'product_name' => $item['product_name'],
-                'quantity' => (float)$item['quantity'],
-                'unit_price' => (float)$item['unit_price'],
-                'line_total' => (float)$item['line_total'],
-                'is_voided' => (bool)$item['is_voided']
-            ];
-        }, $items)
+            'items_count' => (int)($itemCounts['active_items'] ?? 0),
+            'total_items' => (int)($itemCounts['total_items'] ?? 0),
+            'total_quantity' => (float)($itemCounts['total_quantity'] ?? 0)
+        ]
     ]);
     
 } catch (Exception $e) {
-    if (isset($pdo) && $pdo->inTransaction()) {
+    if ($pdo && $pdo->inTransaction()) {
         $pdo->rollBack();
     }
     
-    logEvent('ERROR', 'Resume order failed', [
-        'order_id' => $orderId,
-        'error' => $e->getMessage(),
-        'trace' => $e->getTraceAsString()
-    ]);
-    
+    error_log("[SME180 Resume] Failed: " . $e->getMessage());
     sendError('Failed to resume order', 500, 'RESUME_FAILED');
 }
 ?>

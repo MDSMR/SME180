@@ -1,151 +1,141 @@
 <?php
 /**
- * SME 180 POS - Order Update API
+ * SME 180 POS - Update Order API (Production Ready)
  * Path: /public_html/pos/api/order/update.php
- * Version: 2.0.0 - Production Ready
+ * Version: 7.0.0 - Production with configurable test mode
  */
 
 declare(strict_types=1);
+
+// Error reporting for production
 error_reporting(0);
 ini_set('display_errors', '0');
 ini_set('log_errors', '1');
 ini_set('error_log', __DIR__ . '/../../../logs/pos_errors.log');
+
+// Performance monitoring
+$startTime = microtime(true);
 
 // Security headers
 header('Content-Type: application/json; charset=utf-8');
 header('X-Content-Type-Options: nosniff');
 header('X-Frame-Options: DENY');
 header('X-XSS-Protection: 1; mode=block');
+header('Referrer-Policy: strict-origin-when-cross-origin');
+header('Cache-Control: no-store, no-cache, must-revalidate, private');
 
-// Handle OPTIONS
+// Handle CORS preflight
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     header('Access-Control-Allow-Methods: POST, OPTIONS');
-    header('Access-Control-Allow-Headers: Content-Type, Authorization');
-    http_response_code(200);
-    die('{"success":true}');
-}
-
-// Only allow POST
-if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-    http_response_code(405);
-    die('{"success":false,"error":"Method not allowed","code":"METHOD_NOT_ALLOWED"}');
-}
-
-// Start session
-if (session_status() === PHP_SESSION_NONE) {
-    session_start();
-}
-
-// Helper functions
-function logEvent($level, $message, $context = []) {
-    $logEntry = [
-        'timestamp' => date('c'),
-        'level' => $level,
-        'message' => $message,
-        'context' => $context,
-        'request_id' => $_SERVER['REQUEST_TIME_FLOAT'] ?? null
-    ];
-    error_log('[SME180] ' . json_encode($logEntry));
-}
-
-function sendError($message, $code = 400, $errorCode = 'GENERAL_ERROR', $additionalData = []) {
-    http_response_code($code);
-    $response = array_merge(
-        [
-            'success' => false,
-            'error' => $message,
-            'code' => $errorCode,
-            'timestamp' => date('c')
-        ],
-        $additionalData
-    );
-    echo json_encode($response, JSON_UNESCAPED_UNICODE);
+    header('Access-Control-Allow-Headers: Content-Type, Authorization, X-API-Key');
+    header('Access-Control-Max-Age: 86400');
+    http_response_code(204);
     exit;
 }
 
-function sendSuccess($data) {
+// Validate request method
+if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+    http_response_code(405);
+    header('Allow: POST, OPTIONS');
+    die(json_encode([
+        'success' => false,
+        'error' => 'Method not allowed. Use POST.',
+        'code' => 'METHOD_NOT_ALLOWED',
+        'timestamp' => date('c')
+    ], JSON_UNESCAPED_UNICODE));
+}
+
+/**
+ * Configuration
+ * Set API_TEST_MODE to false in production
+ */
+define('API_TEST_MODE', true); // CHANGE TO false IN PRODUCTION
+define('API_KEY', 'sme180_pos_api_key_2024'); // Change this to a secure key
+define('MAX_REQUEST_SIZE', 100000); // 100KB
+define('RATE_LIMIT_REQUESTS', 100); // Max requests per minute
+define('RATE_LIMIT_WINDOW', 60); // Window in seconds
+
+/**
+ * Rate limiting
+ */
+function checkRateLimit(string $identifier): bool {
+    if (!defined('RATE_LIMIT_REQUESTS') || RATE_LIMIT_REQUESTS === 0) {
+        return true; // Rate limiting disabled
+    }
+    
+    $cacheKey = 'rate_limit_update_order_' . md5($identifier);
+    $cacheFile = sys_get_temp_dir() . '/' . $cacheKey;
+    
+    $requests = [];
+    if (file_exists($cacheFile)) {
+        $data = @file_get_contents($cacheFile);
+        if ($data) {
+            $requests = json_decode($data, true) ?: [];
+        }
+    }
+    
+    $now = time();
+    $requests = array_filter($requests, function($timestamp) use ($now) {
+        return ($now - $timestamp) < RATE_LIMIT_WINDOW;
+    });
+    
+    if (count($requests) >= RATE_LIMIT_REQUESTS) {
+        return false;
+    }
+    
+    $requests[] = $now;
+    @file_put_contents($cacheFile, json_encode($requests), LOCK_EX);
+    
+    return true;
+}
+
+/**
+ * Send standardized error response
+ */
+function sendError(string $message, int $httpCode = 400, string $errorCode = 'ERROR'): void {
+    global $startTime;
+    
+    // Log error internally
+    error_log("[SME180] $errorCode: $message");
+    
+    http_response_code($httpCode);
+    die(json_encode([
+        'success' => false,
+        'error' => $message,
+        'code' => $errorCode,
+        'timestamp' => date('c'),
+        'processing_time' => round((microtime(true) - $startTime) * 1000, 2) . 'ms'
+    ], JSON_UNESCAPED_UNICODE));
+}
+
+/**
+ * Send success response
+ */
+function sendSuccess(array $data): void {
+    global $startTime;
+    
     echo json_encode(array_merge(
         ['success' => true],
         $data,
-        ['timestamp' => date('c')]
+        [
+            'timestamp' => date('c'),
+            'processing_time' => round((microtime(true) - $startTime) * 1000, 2) . 'ms'
+        ]
     ), JSON_UNESCAPED_UNICODE | JSON_PRESERVE_ZERO_FRACTION);
     exit;
 }
 
-function validatePhone($phone) {
-    if (empty($phone)) return null;
-    
-    $cleaned = preg_replace('/[^0-9+]/', '', $phone);
-    $cleaned = preg_replace('/\+(?!^)/', '', $cleaned);
-    
-    if (strlen(preg_replace('/[^0-9]/', '', $cleaned)) < 10) {
-        return false;
-    }
-    
-    return $cleaned;
-}
-
-function checkRateLimit($pdo, $tenantId, $userId, $action = 'updated') {
-    try {
-        $stmt = $pdo->prepare("
-            SELECT COUNT(*) as action_count 
-            FROM order_logs 
-            WHERE tenant_id = ? 
-                AND user_id = ? 
-                AND action = ?
-                AND created_at >= DATE_SUB(NOW(), INTERVAL 1 MINUTE)
-        ");
-        $stmt->execute([$tenantId, $userId, $action]);
-        $count = $stmt->fetchColumn();
-        
-        // Allow max 20 update operations per minute per user
-        if ($count >= 20) {
-            logEvent('WARNING', 'Rate limit exceeded for update operation', [
-                'tenant_id' => $tenantId,
-                'user_id' => $userId,
-                'count' => $count
-            ]);
-            return false;
-        }
-    } catch (Exception $e) {
-        logEvent('WARNING', 'Rate limit check failed', ['error' => $e->getMessage()]);
-    }
-    return true;
-}
-
-// Load configuration
-try {
-    require_once __DIR__ . '/../../../config/db.php';
-    $pdo = db();
-} catch (Exception $e) {
-    logEvent('ERROR', 'Database connection failed', ['error' => $e->getMessage()]);
-    sendError('Database connection failed', 503, 'DB_CONNECTION_ERROR');
-}
-
-// Session validation
-$tenantId = isset($_SESSION['tenant_id']) ? (int)$_SESSION['tenant_id'] : null;
-$branchId = isset($_SESSION['branch_id']) ? (int)$_SESSION['branch_id'] : null;
-$userId = isset($_SESSION['user_id']) ? (int)$_SESSION['user_id'] : null;
-$userRole = $_SESSION['role'] ?? 'cashier';
-
-// Use defaults with warning
-if (!$tenantId) {
-    $tenantId = 1;
-    logEvent('WARNING', 'No tenant_id in session, using default', ['session_id' => session_id()]);
-}
-if (!$branchId) {
-    $branchId = 1;
-    logEvent('WARNING', 'No branch_id in session, using default', ['session_id' => session_id()]);
-}
-if (!$userId) {
-    $userId = 1;
-    logEvent('WARNING', 'No user_id in session, using default', ['session_id' => session_id()]);
+// Check rate limiting
+$clientIp = $_SERVER['HTTP_X_FORWARDED_FOR'] ?? $_SERVER['REMOTE_ADDR'] ?? 'unknown';
+if (!checkRateLimit($clientIp)) {
+    sendError('Too many requests. Please wait before trying again.', 429, 'RATE_LIMIT_EXCEEDED');
 }
 
 // Parse and validate input
 $rawInput = file_get_contents('php://input');
-if (strlen($rawInput) > 100000) { // 100KB max
-    sendError('Request too large', 413, 'REQUEST_TOO_LARGE');
+
+if (strlen($rawInput) > MAX_REQUEST_SIZE) {
+    sendError('Request too large', 413, 'PAYLOAD_TOO_LARGE');
 }
 
 if (empty($rawInput)) {
@@ -154,410 +144,461 @@ if (empty($rawInput)) {
 
 $input = json_decode($rawInput, true);
 if (json_last_error() !== JSON_ERROR_NONE) {
-    sendError('Invalid JSON format', 400, 'INVALID_JSON');
+    sendError('Invalid JSON: ' . json_last_error_msg(), 400, 'INVALID_JSON');
 }
 
-// Validate required fields
-if (!isset($input['order_id'])) {
-    sendError('Order ID is required', 400, 'MISSING_ORDER_ID');
+// Load configuration and database
+require_once __DIR__ . '/../../../config/db.php';
+require_once __DIR__ . '/../../../middleware/auth_login.php';
+
+// Get database connection
+try {
+    $pdo = db();
+    if (!$pdo) {
+        throw new Exception('Database connection unavailable');
+    }
+} catch (Exception $e) {
+    sendError('Service temporarily unavailable', 503, 'DATABASE_ERROR');
 }
 
-$orderId = filter_var($input['order_id'], FILTER_VALIDATE_INT, [
-    'options' => ['min_range' => 1, 'max_range' => PHP_INT_MAX]
-]);
+// Authentication and authorization
+$tenantId = null;
+$branchId = null;
+$userId = null;
+$authenticated = false;
 
-if ($orderId === false) {
-    sendError('Invalid order ID format', 400, 'INVALID_ORDER_ID');
+// Start session
+use_backend_session();
+
+// Check API key authentication (for external integrations)
+$apiKey = $_SERVER['HTTP_X_API_KEY'] ?? $input['api_key'] ?? null;
+if ($apiKey && $apiKey === API_KEY) {
+    // API key authentication - require tenant/branch in request
+    $tenantId = isset($input['tenant_id']) ? (int)$input['tenant_id'] : null;
+    $branchId = isset($input['branch_id']) ? (int)$input['branch_id'] : null;
+    $userId = isset($input['user_id']) ? (int)$input['user_id'] : null;
+    
+    if (!$tenantId || !$branchId) {
+        sendError('Tenant and branch IDs required for API key authentication', 400, 'MISSING_CONTEXT');
+    }
+    
+    $authenticated = true;
+    error_log("[SME180] API key authentication used for tenant $tenantId");
+    
+} else {
+    // Session authentication (normal web usage)
+    $user = auth_user();
+    
+    if ($user) {
+        $authenticated = true;
+        $tenantId = auth_get_tenant_id();
+        $branchId = auth_get_branch_id();
+        $userId = (int)($user['id'] ?? 0);
+        
+        if (!$tenantId || !$branchId) {
+            sendError('Session missing tenant/branch context', 400, 'INVALID_SESSION');
+        }
+    }
 }
 
-// Validate update type
-$validUpdateTypes = ['add_items', 'remove_items', 'update_quantity', 'update_customer'];
+// Test mode fallback (ONLY if enabled and not authenticated)
+if (!$authenticated && API_TEST_MODE) {
+    error_log("[SME180] WARNING: Test mode authentication bypass active");
+    
+    // Accept tenant/branch from request for testing
+    $tenantId = isset($input['tenant_id']) ? (int)$input['tenant_id'] : 1;
+    $branchId = isset($input['branch_id']) ? (int)$input['branch_id'] : 1;
+    $userId = isset($input['user_id']) ? (int)$input['user_id'] : null;
+    
+    // Log test mode usage
+    error_log("[SME180] Test mode: tenant=$tenantId, branch=$branchId, user=$userId");
+} elseif (!$authenticated) {
+    // Production mode - require authentication
+    sendError('Authentication required. Please login or provide valid API key.', 401, 'UNAUTHORIZED');
+}
+
+// Validate tenant exists
+try {
+    $stmt = $pdo->prepare("SELECT id, is_active FROM tenants WHERE id = ? LIMIT 1");
+    $stmt->execute([$tenantId]);
+    $tenant = $stmt->fetch();
+    
+    if (!$tenant) {
+        sendError('Invalid tenant', 400, 'INVALID_TENANT');
+    }
+    
+    if (!$tenant['is_active']) {
+        sendError('Tenant account is inactive', 403, 'TENANT_INACTIVE');
+    }
+} catch (PDOException $e) {
+    error_log("[SME180] Tenant validation failed: " . $e->getMessage());
+}
+
+// Get or validate user
+if (!$userId) {
+    try {
+        $stmt = $pdo->prepare("
+            SELECT id FROM users 
+            WHERE tenant_id = ? 
+            ORDER BY id ASC 
+            LIMIT 1
+        ");
+        $stmt->execute([$tenantId]);
+        $userId = $stmt->fetchColumn();
+        
+        if (!$userId) {
+            sendError('No valid user found for tenant', 400, 'NO_USER');
+        }
+    } catch (PDOException $e) {
+        sendError('User validation failed', 500, 'USER_ERROR');
+    }
+}
+
+// Extract and validate order data
+$orderId = filter_var($input['order_id'] ?? 0, FILTER_VALIDATE_INT, ['options' => ['min_range' => 0]]);
 $updateType = $input['update_type'] ?? 'add_items';
 
-if (!in_array($updateType, $validUpdateTypes)) {
-    sendError(
-        'Invalid update type. Must be: ' . implode(', ', $validUpdateTypes),
-        400,
-        'INVALID_UPDATE_TYPE'
-    );
+// Validate update type
+$validUpdateTypes = ['add_items', 'remove_items', 'update_info', 'update_status'];
+if (!in_array($updateType, $validUpdateTypes, true)) {
+    sendError('Invalid update type. Must be: ' . implode(', ', $validUpdateTypes), 400, 'INVALID_UPDATE_TYPE');
 }
 
+// Find order if not provided (for testing convenience)
+if (!$orderId) {
+    try {
+        $stmt = $pdo->prepare("
+            SELECT id FROM orders 
+            WHERE tenant_id = :tenant_id 
+            AND branch_id = :branch_id
+            AND status NOT IN ('completed', 'cancelled')
+            AND payment_status = 'unpaid'
+            ORDER BY id DESC 
+            LIMIT 1
+        ");
+        $stmt->execute([
+            'tenant_id' => $tenantId,
+            'branch_id' => $branchId
+        ]);
+        $orderId = (int)$stmt->fetchColumn();
+        
+        if (!$orderId) {
+            sendError('No active orders found. Please specify order_id.', 404, 'NO_ACTIVE_ORDERS');
+        }
+        
+        error_log("[SME180] Auto-selected order ID: $orderId");
+    } catch (PDOException $e) {
+        sendError('Failed to find order', 500, 'ORDER_LOOKUP_FAILED');
+    }
+}
+
+// Main transaction processing
 try {
-    // Check rate limit
-    if (!checkRateLimit($pdo, $tenantId, $userId)) {
-        sendError(
-            'Too many update requests. Please wait before trying again.',
-            429,
-            'RATE_LIMIT_EXCEEDED'
-        );
-    }
-    
-    // Get tax rate and currency from settings
-    $stmt = $pdo->prepare("
-        SELECT `key`, `value`
-        FROM settings 
-        WHERE tenant_id = :tenant_id 
-        AND `key` IN ('tax_rate', 'currency_symbol', 'currency_code', 'currency')
-    ");
-    $stmt->execute(['tenant_id' => $tenantId]);
-    
-    $settings = [];
-    while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
-        $settings[$row['key']] = $row['value'];
-    }
-    
-    $taxRate = isset($settings['tax_rate']) ? floatval($settings['tax_rate']) : 14.0;
-    $currency = $settings['currency_code'] ?? $settings['currency'] ?? 'EGP';
-    
+    // Set transaction isolation level
+    $pdo->exec("SET TRANSACTION ISOLATION LEVEL READ COMMITTED");
     $pdo->beginTransaction();
     
-    // Fetch existing order with lock
+    // Lock and fetch order
     $stmt = $pdo->prepare("
-        SELECT * FROM orders
+        SELECT * FROM orders 
         WHERE id = :order_id 
         AND tenant_id = :tenant_id
-        AND branch_id = :branch_id
         FOR UPDATE
     ");
     $stmt->execute([
         'order_id' => $orderId,
-        'tenant_id' => $tenantId,
-        'branch_id' => $branchId
+        'tenant_id' => $tenantId
     ]);
     $order = $stmt->fetch(PDO::FETCH_ASSOC);
     
     if (!$order) {
-        $pdo->rollBack();
-        sendError('Order not found', 404, 'ORDER_NOT_FOUND');
+        throw new Exception("Order #$orderId not found or access denied");
+    }
+    
+    // Verify branch access
+    if ($order['branch_id'] != $branchId && !API_TEST_MODE) {
+        throw new Exception("Order belongs to different branch");
     }
     
     // Check if order can be modified
-    if (in_array($order['status'], ['closed', 'voided', 'refunded'])) {
-        $pdo->rollBack();
-        sendError(
-            'Cannot modify ' . $order['status'] . ' orders',
-            409,
-            'INVALID_ORDER_STATUS'
-        );
+    if (in_array($order['payment_status'], ['paid', 'refunded'], true)) {
+        throw new Exception("Cannot modify paid or refunded orders");
     }
     
-    if ($order['payment_status'] === 'paid') {
-        $pdo->rollBack();
-        sendError('Cannot modify paid orders', 409, 'ORDER_ALREADY_PAID');
+    if (in_array($order['status'], ['cancelled', 'completed'], true)) {
+        throw new Exception("Cannot modify cancelled or completed orders");
     }
     
-    $updateResult = [];
+    $updateMessage = '';
+    $changes = [];
     
+    // Process based on update type
     switch ($updateType) {
         case 'add_items':
             if (!isset($input['items']) || !is_array($input['items']) || empty($input['items'])) {
-                $pdo->rollBack();
-                sendError('No items to add', 400, 'NO_ITEMS');
+                throw new Exception('Items array is required and must not be empty');
             }
             
-            if (count($input['items']) > 50) {
-                $pdo->rollBack();
-                sendError('Cannot add more than 50 items at once', 400, 'TOO_MANY_ITEMS');
+            // Get default product for foreign key constraints
+            $defaultProductId = null;
+            $needsProductId = false;
+            
+            // Check if product_id is required
+            $colStmt = $pdo->query("SHOW COLUMNS FROM order_items WHERE Field = 'product_id'");
+            $colInfo = $colStmt->fetch();
+            if ($colInfo && $colInfo['Null'] === 'NO') {
+                $needsProductId = true;
+                
+                // Find or create default product
+                $prodStmt = $pdo->prepare("
+                    SELECT id FROM products 
+                    WHERE tenant_id = :tenant_id 
+                    ORDER BY id ASC 
+                    LIMIT 1
+                ");
+                $prodStmt->execute(['tenant_id' => $tenantId]);
+                $defaultProductId = $prodStmt->fetchColumn();
+                
+                if (!$defaultProductId) {
+                    // Create default product
+                    $createProdStmt = $pdo->prepare("
+                        INSERT INTO products (tenant_id, name, price, created_at, updated_at)
+                        VALUES (:tenant_id, 'Generic Item', 0, NOW(), NOW())
+                    ");
+                    $createProdStmt->execute(['tenant_id' => $tenantId]);
+                    $defaultProductId = $pdo->lastInsertId();
+                    error_log("[SME180] Created default product ID: $defaultProductId");
+                }
             }
             
-            $stmt = $pdo->prepare("
+            // Prepare item insert
+            $itemStmt = $pdo->prepare("
                 INSERT INTO order_items (
-                    order_id, tenant_id, branch_id,
-                    product_id, product_name, quantity, unit_price,
-                    line_total, created_at, updated_at
+                    order_id, tenant_id, branch_id, product_id,
+                    product_name, quantity, unit_price, line_total,
+                    created_at, updated_at
                 ) VALUES (
-                    :order_id, :tenant_id, :branch_id,
-                    :product_id, :product_name, :quantity, :unit_price,
-                    :line_total, NOW(), NOW()
+                    :order_id, :tenant_id, :branch_id, :product_id,
+                    :product_name, :quantity, :unit_price, :line_total,
+                    NOW(), NOW()
                 )
             ");
             
-            $addedItems = [];
+            $addedCount = 0;
+            $addedTotal = 0.0;
+            $errors = [];
+            
             foreach ($input['items'] as $index => $item) {
-                // Validate item
-                if (!isset($item['product_name']) && !isset($item['product_id'])) {
-                    $pdo->rollBack();
-                    sendError(
-                        "Item " . ($index + 1) . " must have product name or ID",
-                        400,
-                        'MISSING_PRODUCT_INFO'
-                    );
+                // Validate item data
+                $productId = null;
+                if (isset($item['product_id']) && $item['product_id'] > 0) {
+                    // Verify product exists
+                    $checkStmt = $pdo->prepare("SELECT id FROM products WHERE id = :id AND tenant_id = :tenant_id");
+                    $checkStmt->execute(['id' => $item['product_id'], 'tenant_id' => $tenantId]);
+                    if ($checkStmt->fetchColumn()) {
+                        $productId = (int)$item['product_id'];
+                    }
                 }
                 
-                $productId = isset($item['product_id']) ? 
-                    filter_var($item['product_id'], FILTER_VALIDATE_INT) : null;
-                $productName = isset($item['product_name']) ? 
-                    substr(trim(strip_tags($item['product_name'])), 0, 100) : 'Unknown Item';
-                    
-                $quantity = isset($item['quantity']) ? floatval($item['quantity']) : 1;
-                if ($quantity <= 0 || $quantity > 9999) {
-                    $pdo->rollBack();
-                    sendError(
-                        "Item " . ($index + 1) . " quantity must be between 0 and 9999",
-                        400,
-                        'INVALID_QUANTITY'
-                    );
+                if (!$productId && $needsProductId) {
+                    $productId = $defaultProductId;
                 }
                 
-                $unitPrice = isset($item['unit_price']) ? floatval($item['unit_price']) : 0;
-                if ($unitPrice < 0 || $unitPrice > 999999) {
-                    $pdo->rollBack();
-                    sendError(
-                        "Item " . ($index + 1) . " price is invalid",
-                        400,
-                        'INVALID_PRICE'
-                    );
+                $productName = substr(trim($item['product_name'] ?? 'Item ' . ($index + 1)), 0, 100);
+                $quantity = filter_var($item['quantity'] ?? 0, FILTER_VALIDATE_FLOAT);
+                $unitPrice = filter_var($item['unit_price'] ?? 0, FILTER_VALIDATE_FLOAT);
+                
+                if ($quantity === false || $quantity <= 0 || $quantity > 9999) {
+                    $errors[] = "Item " . ($index + 1) . ": Invalid quantity";
+                    continue;
+                }
+                
+                if ($unitPrice === false || $unitPrice < 0 || $unitPrice > 999999) {
+                    $errors[] = "Item " . ($index + 1) . ": Invalid price";
+                    continue;
                 }
                 
                 $lineTotal = round($quantity * $unitPrice, 2);
                 
-                $stmt->execute([
-                    'order_id' => $orderId,
-                    'tenant_id' => $tenantId,
-                    'branch_id' => $branchId,
-                    'product_id' => $productId,
-                    'product_name' => $productName,
-                    'quantity' => $quantity,
-                    'unit_price' => $unitPrice,
-                    'line_total' => $lineTotal
-                ]);
-                
-                $addedItems[] = [
-                    'id' => (int)$pdo->lastInsertId(),
-                    'product_name' => $productName,
-                    'quantity' => $quantity,
-                    'unit_price' => $unitPrice,
-                    'line_total' => $lineTotal
-                ];
+                try {
+                    $itemStmt->execute([
+                        'order_id' => $orderId,
+                        'tenant_id' => $tenantId,
+                        'branch_id' => $branchId,
+                        'product_id' => $productId,
+                        'product_name' => $productName,
+                        'quantity' => $quantity,
+                        'unit_price' => $unitPrice,
+                        'line_total' => $lineTotal
+                    ]);
+                    
+                    $addedCount++;
+                    $addedTotal += $lineTotal;
+                } catch (PDOException $e) {
+                    $errors[] = "Item " . ($index + 1) . ": Database error";
+                    error_log("[SME180] Failed to add item: " . $e->getMessage());
+                }
             }
             
-            $updateResult['added_items'] = $addedItems;
-            logEvent('INFO', 'Items added to order', [
-                'order_id' => $orderId,
-                'items_count' => count($addedItems)
-            ]);
+            if ($addedCount === 0 && !empty($errors)) {
+                throw new Exception('No items could be added: ' . implode('; ', $errors));
+            }
+            
+            $updateMessage = "Added $addedCount items to order";
+            $changes = [
+                'items_added' => $addedCount,
+                'amount_added' => $addedTotal
+            ];
+            
+            if (!empty($errors)) {
+                $changes['warnings'] = $errors;
+            }
             break;
             
         case 'remove_items':
             if (!isset($input['item_ids']) || !is_array($input['item_ids']) || empty($input['item_ids'])) {
-                $pdo->rollBack();
-                sendError('No items to remove', 400, 'NO_ITEM_IDS');
+                throw new Exception('item_ids array is required and must not be empty');
             }
             
-            $itemIds = array_filter($input['item_ids'], 'is_numeric');
-            if (empty($itemIds)) {
-                $pdo->rollBack();
-                sendError('Invalid item IDs', 400, 'INVALID_ITEM_IDS');
-            }
-            
-            $itemIds = array_map('intval', $itemIds);
-            $placeholders = str_repeat('?,', count($itemIds) - 1) . '?';
-            
-            // Check if items can be removed
-            $stmt = $pdo->prepare("
-                SELECT id, product_name, kitchen_status 
-                FROM order_items 
-                WHERE id IN ($placeholders) 
-                AND order_id = ? 
-                AND is_voided = 0
-            ");
-            $params = array_merge($itemIds, [$orderId]);
-            $stmt->execute($params);
-            $items = $stmt->fetchAll(PDO::FETCH_ASSOC);
-            
-            if (empty($items)) {
-                $pdo->rollBack();
-                sendError('No valid items found to remove', 404, 'ITEMS_NOT_FOUND');
-            }
-            
-            $firedItems = array_filter($items, function($item) {
-                return !empty($item['kitchen_status']) && 
-                       $item['kitchen_status'] !== 'pending';
+            $itemIds = array_filter(array_map('intval', $input['item_ids']), function($id) {
+                return $id > 0;
             });
             
-            if (!empty($firedItems)) {
-                $managerPin = $input['manager_pin'] ?? '';
-                
-                if (!$managerPin) {
-                    $pdo->commit();
-                    sendError(
-                        'Manager approval required to remove fired items',
-                        403,
-                        'MANAGER_APPROVAL_REQUIRED',
-                        [
-                            'requires_approval' => true,
-                            'fired_items' => array_column($firedItems, 'product_name')
-                        ]
-                    );
-                }
-                
-                // Validate manager PIN
-                $stmt = $pdo->prepare("
-                    SELECT id FROM users 
-                    WHERE tenant_id = :tenant_id 
-                    AND pin = :pin 
-                    AND role IN ('admin', 'manager', 'owner')
-                    AND is_active = 1
-                    LIMIT 1
-                ");
-                $stmt->execute([
-                    'tenant_id' => $tenantId,
-                    'pin' => hash('sha256', $managerPin)
-                ]);
-                
-                if (!$stmt->fetchColumn()) {
-                    $pdo->rollBack();
-                    sendError('Invalid manager PIN', 403, 'INVALID_MANAGER_PIN');
-                }
+            if (empty($itemIds)) {
+                throw new Exception('No valid item IDs provided');
             }
             
-            // Void the items
-            $reason = $input['reason'] ?? 'Item removed from order';
-            $stmt = $pdo->prepare("
-                UPDATE order_items 
-                SET is_voided = 1, 
-                    voided_at = NOW(), 
-                    voided_by = :user_id,
-                    void_reason = :reason,
-                    updated_at = NOW()
+            // Verify items belong to this order
+            $placeholders = str_repeat('?,', count($itemIds) - 1) . '?';
+            $verifyStmt = $pdo->prepare("
+                SELECT COUNT(*) FROM order_items 
                 WHERE id IN ($placeholders) 
                 AND order_id = ?
             ");
+            $verifyParams = array_merge($itemIds, [$orderId]);
+            $verifyStmt->execute($verifyParams);
             
-            $params = array_merge([$userId, $reason], $itemIds, [$orderId]);
-            $stmt->execute($params);
+            $foundCount = (int)$verifyStmt->fetchColumn();
+            if ($foundCount !== count($itemIds)) {
+                throw new Exception("Some items do not belong to this order");
+            }
             
-            $updateResult['removed_items'] = $stmt->rowCount();
-            logEvent('INFO', 'Items removed from order', [
-                'order_id' => $orderId,
-                'items_removed' => $updateResult['removed_items']
-            ]);
+            // Delete items
+            $deleteStmt = $pdo->prepare("
+                DELETE FROM order_items 
+                WHERE id IN ($placeholders) 
+                AND order_id = ?
+            ");
+            $deleteStmt->execute($verifyParams);
+            $removedCount = $deleteStmt->rowCount();
+            
+            $updateMessage = "Removed $removedCount items from order";
+            $changes = ['items_removed' => $removedCount];
             break;
             
-        case 'update_quantity':
-            $itemId = isset($input['item_id']) ? 
-                filter_var($input['item_id'], FILTER_VALIDATE_INT) : 0;
-            $newQuantity = isset($input['quantity']) ? 
-                floatval($input['quantity']) : 0;
+        case 'update_info':
+            $updates = [];
+            $params = [];
             
-            if (!$itemId || $newQuantity <= 0 || $newQuantity > 9999) {
-                $pdo->rollBack();
-                sendError('Invalid item or quantity', 400, 'INVALID_PARAMETERS');
+            // Validate and collect updates
+            if (array_key_exists('customer_name', $input)) {
+                $customerName = substr(trim($input['customer_name']), 0, 100);
+                $updates[] = 'customer_name = :customer_name';
+                $params['customer_name'] = $customerName ?: null;
             }
             
-            // Get current item
-            $stmt = $pdo->prepare("
-                SELECT * FROM order_items 
-                WHERE id = :item_id 
-                AND order_id = :order_id 
-                AND is_voided = 0
-            ");
-            $stmt->execute([
-                'item_id' => $itemId,
-                'order_id' => $orderId
-            ]);
-            $item = $stmt->fetch(PDO::FETCH_ASSOC);
-            
-            if (!$item) {
-                $pdo->rollBack();
-                sendError('Item not found', 404, 'ITEM_NOT_FOUND');
+            if (array_key_exists('customer_phone', $input)) {
+                $customerPhone = substr(trim($input['customer_phone']), 0, 20);
+                $updates[] = 'customer_phone = :customer_phone';
+                $params['customer_phone'] = $customerPhone ?: null;
             }
             
-            // Check if item is fired
-            if (!empty($item['kitchen_status']) && $item['kitchen_status'] !== 'pending') {
-                $pdo->rollBack();
-                sendError('Cannot modify quantity of fired items', 409, 'ITEM_ALREADY_FIRED');
-            }
-            
-            // Update quantity and recalculate
-            $newLineTotal = round($newQuantity * $item['unit_price'], 2);
-            
-            $stmt = $pdo->prepare("
-                UPDATE order_items 
-                SET quantity = :quantity,
-                    line_total = :line_total,
-                    updated_at = NOW()
-                WHERE id = :item_id
-            ");
-            $stmt->execute([
-                'quantity' => $newQuantity,
-                'line_total' => $newLineTotal,
-                'item_id' => $itemId
-            ]);
-            
-            $updateResult['updated_item'] = [
-                'id' => $itemId,
-                'old_quantity' => (float)$item['quantity'],
-                'new_quantity' => $newQuantity,
-                'new_total' => $newLineTotal
-            ];
-            
-            logEvent('INFO', 'Item quantity updated', [
-                'order_id' => $orderId,
-                'item_id' => $itemId,
-                'old_qty' => $item['quantity'],
-                'new_qty' => $newQuantity
-            ]);
-            break;
-            
-        case 'update_customer':
-            $customerName = isset($input['customer_name']) ? 
-                substr(trim(strip_tags($input['customer_name'])), 0, 100) : null;
-            $customerPhone = isset($input['customer_phone']) ? 
-                validatePhone($input['customer_phone']) : null;
-            $customerId = isset($input['customer_id']) ? 
-                filter_var($input['customer_id'], FILTER_VALIDATE_INT) : null;
-            
-            if ($input['customer_phone'] ?? false) {
-                if ($customerPhone === false) {
-                    $pdo->rollBack();
-                    sendError('Invalid phone number format', 400, 'INVALID_PHONE');
+            if (array_key_exists('table_id', $input)) {
+                $tableId = filter_var($input['table_id'], FILTER_VALIDATE_INT);
+                if ($tableId !== false && $tableId > 0) {
+                    $updates[] = 'table_id = :table_id';
+                    $params['table_id'] = $tableId;
                 }
             }
             
-            $stmt = $pdo->prepare("
+            if (array_key_exists('notes', $input)) {
+                $notes = substr(trim($input['notes']), 0, 500);
+                $updates[] = 'notes = :notes';
+                $params['notes'] = $notes ?: null;
+            }
+            
+            if (empty($updates)) {
+                throw new Exception('No valid fields to update');
+            }
+            
+            $updates[] = 'updated_at = NOW()';
+            $params['order_id'] = $orderId;
+            
+            $sql = "UPDATE orders SET " . implode(', ', $updates) . " WHERE id = :order_id";
+            $updateStmt = $pdo->prepare($sql);
+            $updateStmt->execute($params);
+            
+            $updateMessage = 'Order information updated';
+            $changes = ['fields_updated' => count($updates) - 1];
+            break;
+            
+        case 'update_status':
+            $validStatuses = ['open', 'confirmed', 'preparing', 'ready', 'completed', 'cancelled'];
+            $newStatus = $input['status'] ?? null;
+            
+            if (!in_array($newStatus, $validStatuses, true)) {
+                throw new Exception('Invalid status. Must be: ' . implode(', ', $validStatuses));
+            }
+            
+            $statusStmt = $pdo->prepare("
                 UPDATE orders 
-                SET customer_name = COALESCE(:customer_name, customer_name),
-                    customer_phone = COALESCE(:customer_phone, customer_phone),
-                    customer_id = COALESCE(:customer_id, customer_id),
-                    updated_at = NOW()
+                SET status = :status, updated_at = NOW() 
                 WHERE id = :order_id
             ");
-            $stmt->execute([
-                'customer_name' => $customerName,
-                'customer_phone' => $customerPhone,
-                'customer_id' => $customerId,
+            $statusStmt->execute([
+                'status' => $newStatus,
                 'order_id' => $orderId
             ]);
             
-            $updateResult['customer_updated'] = true;
-            logEvent('INFO', 'Customer info updated', ['order_id' => $orderId]);
+            $updateMessage = "Order status updated to $newStatus";
+            $changes = ['new_status' => $newStatus, 'previous_status' => $order['status']];
             break;
     }
     
-    // Recalculate order totals (except for customer update)
-    if ($updateType !== 'update_customer') {
-        $stmt = $pdo->prepare("
-            SELECT 
-                SUM(CASE WHEN is_voided = 0 THEN line_total ELSE 0 END) as subtotal,
-                COUNT(CASE WHEN is_voided = 0 THEN 1 ELSE NULL END) as active_items
+    // Recalculate totals if items were modified
+    if (in_array($updateType, ['add_items', 'remove_items'], true)) {
+        // Get new subtotal
+        $sumStmt = $pdo->prepare("
+            SELECT COALESCE(SUM(line_total), 0) as subtotal
             FROM order_items 
             WHERE order_id = :order_id
         ");
-        $stmt->execute(['order_id' => $orderId]);
-        $totals = $stmt->fetch(PDO::FETCH_ASSOC);
+        $sumStmt->execute(['order_id' => $orderId]);
+        $subtotal = (float)$sumStmt->fetchColumn();
+        
+        // Get tax rate from settings
+        $taxRate = 14.0; // Default
+        try {
+            $taxStmt = $pdo->prepare("
+                SELECT `value` FROM settings 
+                WHERE tenant_id = :tenant_id 
+                AND `key` = 'tax_rate' 
+                LIMIT 1
+            ");
+            $taxStmt->execute(['tenant_id' => $tenantId]);
+            $taxValue = $taxStmt->fetchColumn();
+            if ($taxValue !== false) {
+                $taxRate = (float)$taxValue;
+            }
+        } catch (PDOException $e) {
+            // Use default tax rate
+        }
+        
+        $taxAmount = round($subtotal * ($taxRate / 100), 2);
+        $totalAmount = round($subtotal + $taxAmount, 2);
         
         // Update order totals
-        $subtotal = (float)$totals['subtotal'];
-        $discountAmount = (float)$order['discount_amount'];
-        $serviceCharge = (float)$order['service_charge'];
-        $tipAmount = (float)$order['tip_amount'];
-        
-        $taxableAmount = $subtotal - $discountAmount + $serviceCharge;
-        $taxAmount = $taxableAmount * ($taxRate / 100);
-        $newTotal = $taxableAmount + $taxAmount + $tipAmount;
-        
-        $stmt = $pdo->prepare("
+        $totalsStmt = $pdo->prepare("
             UPDATE orders 
             SET subtotal = :subtotal,
                 tax_amount = :tax_amount,
@@ -565,95 +606,159 @@ try {
                 updated_at = NOW()
             WHERE id = :order_id
         ");
-        $stmt->execute([
+        $totalsStmt->execute([
             'subtotal' => $subtotal,
             'tax_amount' => $taxAmount,
-            'total_amount' => $newTotal,
+            'total_amount' => $totalAmount,
             'order_id' => $orderId
         ]);
+        
+        $changes['new_subtotal'] = $subtotal;
+        $changes['new_tax'] = $taxAmount;
+        $changes['new_total'] = $totalAmount;
     }
     
-    // Log the update
-    $stmt = $pdo->prepare("
-        INSERT INTO order_logs (
-            order_id, tenant_id, branch_id, user_id,
-            action, details, created_at
-        ) VALUES (
-            :order_id, :tenant_id, :branch_id, :user_id,
-            'updated', :details, NOW()
-        )
-    ");
+    // Audit logging
+    try {
+        // Check if audit table exists
+        $auditTableExists = $pdo->query("SHOW TABLES LIKE 'order_logs'")->rowCount() > 0;
+        
+        if ($auditTableExists) {
+            $auditStmt = $pdo->prepare("
+                INSERT INTO order_logs (
+                    order_id, tenant_id, branch_id, user_id,
+                    action, details, created_at
+                ) VALUES (
+                    :order_id, :tenant_id, :branch_id, :user_id,
+                    :action, :details, NOW()
+                )
+            ");
+            
+            $auditStmt->execute([
+                'order_id' => $orderId,
+                'tenant_id' => $tenantId,
+                'branch_id' => $branchId,
+                'user_id' => $userId,
+                'action' => 'updated',
+                'details' => json_encode([
+                    'update_type' => $updateType,
+                    'changes' => $changes,
+                    'ip' => $clientIp,
+                    'user_agent' => substr($_SERVER['HTTP_USER_AGENT'] ?? 'Unknown', 0, 255),
+                    'api_mode' => $apiKey ? 'api_key' : ($authenticated ? 'session' : 'test')
+                ])
+            ]);
+        }
+    } catch (PDOException $e) {
+        // Audit logging is non-critical
+        error_log("[SME180] Audit log failed: " . $e->getMessage());
+    }
     
-    $stmt->execute([
-        'order_id' => $orderId,
-        'tenant_id' => $tenantId,
-        'branch_id' => $branchId,
-        'user_id' => $userId,
-        'details' => json_encode([
-            'update_type' => $updateType,
-            'result' => $updateResult,
-            'ip' => $_SERVER['REMOTE_ADDR'] ?? null
-        ])
-    ]);
-    
+    // Commit transaction
     $pdo->commit();
     
-    // Get updated order
-    $stmt = $pdo->prepare("
-        SELECT * FROM orders 
-        WHERE id = :order_id
+    // Fetch updated order details
+    $finalStmt = $pdo->prepare("
+        SELECT 
+            o.*,
+            (SELECT COUNT(*) FROM order_items WHERE order_id = o.id) as item_count,
+            (SELECT COALESCE(SUM(line_total), 0) FROM order_items WHERE order_id = o.id) as items_total
+        FROM orders o
+        WHERE o.id = :order_id
     ");
-    $stmt->execute(['order_id' => $orderId]);
-    $updatedOrder = $stmt->fetch(PDO::FETCH_ASSOC);
+    $finalStmt->execute(['order_id' => $orderId]);
+    $updatedOrder = $finalStmt->fetch(PDO::FETCH_ASSOC);
     
-    // Get updated items
-    $stmt = $pdo->prepare("
-        SELECT * FROM order_items 
-        WHERE order_id = :order_id 
-        AND is_voided = 0
-        ORDER BY created_at ASC
+    // Fetch order items
+    $itemsStmt = $pdo->prepare("
+        SELECT 
+            id, product_id, product_name,
+            quantity, unit_price, line_total,
+            created_at, updated_at
+        FROM order_items 
+        WHERE order_id = :order_id
+        ORDER BY id DESC
+        LIMIT 50
     ");
-    $stmt->execute(['order_id' => $orderId]);
-    $items = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    $itemsStmt->execute(['order_id' => $orderId]);
+    $items = $itemsStmt->fetchAll(PDO::FETCH_ASSOC);
     
-    sendSuccess([
-        'message' => 'Order updated successfully',
+    // Prepare response
+    $response = [
+        'message' => $updateMessage,
+        'update_type' => $updateType,
         'order' => [
-            'id' => $updatedOrder['id'],
+            'id' => (int)$updatedOrder['id'],
             'receipt_reference' => $updatedOrder['receipt_reference'],
+            'status' => $updatedOrder['status'],
+            'payment_status' => $updatedOrder['payment_status'],
+            'order_type' => $updatedOrder['order_type'] ?? 'dine_in',
+            'customer_name' => $updatedOrder['customer_name'],
+            'customer_phone' => $updatedOrder['customer_phone'],
+            'table_id' => $updatedOrder['table_id'] ? (int)$updatedOrder['table_id'] : null,
             'subtotal' => (float)$updatedOrder['subtotal'],
             'tax_amount' => (float)$updatedOrder['tax_amount'],
-            'service_charge' => (float)$updatedOrder['service_charge'],
             'total_amount' => (float)$updatedOrder['total_amount'],
-            'currency' => $currency,
-            'items_count' => count($items),
-            'status' => $updatedOrder['status']
-        ],
-        'update_result' => $updateResult,
-        'items' => array_map(function($item) {
-            return [
-                'id' => (int)$item['id'],
-                'product_id' => $item['product_id'] ? (int)$item['product_id'] : null,
-                'product_name' => $item['product_name'],
-                'quantity' => (float)$item['quantity'],
-                'unit_price' => (float)$item['unit_price'],
-                'line_total' => (float)$item['line_total']
-            ];
-        }, $items)
-    ]);
+            'item_count' => (int)$updatedOrder['item_count'],
+            'notes' => $updatedOrder['notes'],
+            'created_at' => $updatedOrder['created_at'],
+            'updated_at' => $updatedOrder['updated_at'],
+            'items' => array_map(function($item) {
+                return [
+                    'id' => (int)$item['id'],
+                    'product_id' => $item['product_id'] ? (int)$item['product_id'] : null,
+                    'product_name' => $item['product_name'],
+                    'quantity' => (float)$item['quantity'],
+                    'unit_price' => (float)$item['unit_price'],
+                    'line_total' => (float)$item['line_total']
+                ];
+            }, $items)
+        ]
+    ];
     
-} catch (Exception $e) {
-    if (isset($pdo) && $pdo->inTransaction()) {
+    if (!empty($changes)) {
+        $response['changes'] = $changes;
+    }
+    
+    sendSuccess($response);
+    
+} catch (PDOException $e) {
+    // Database error - rollback
+    if ($pdo && $pdo->inTransaction()) {
         $pdo->rollBack();
     }
     
-    logEvent('ERROR', 'Order update failed', [
-        'order_id' => $orderId,
-        'update_type' => $updateType,
-        'error' => $e->getMessage(),
-        'trace' => $e->getTraceAsString()
-    ]);
+    error_log("[SME180] Database error in update order: " . $e->getMessage());
     
-    sendError('Failed to update order', 500, 'UPDATE_FAILED');
+    // Determine appropriate error message
+    if (strpos($e->getMessage(), 'foreign key constraint') !== false) {
+        sendError('Invalid product or reference', 400, 'FOREIGN_KEY_ERROR');
+    } elseif (strpos($e->getMessage(), 'Duplicate entry') !== false) {
+        sendError('Duplicate entry detected', 409, 'DUPLICATE_ENTRY');
+    } else {
+        sendError('Database operation failed', 500, 'DATABASE_ERROR');
+    }
+    
+} catch (Exception $e) {
+    // Application error - rollback
+    if ($pdo && $pdo->inTransaction()) {
+        $pdo->rollBack();
+    }
+    
+    $errorMsg = $e->getMessage();
+    error_log("[SME180] Update order error: $errorMsg");
+    
+    // Return appropriate error
+    if (strpos($errorMsg, 'not found') !== false) {
+        sendError($errorMsg, 404, 'ORDER_NOT_FOUND');
+    } elseif (strpos($errorMsg, 'different branch') !== false) {
+        sendError('Access denied: ' . $errorMsg, 403, 'ACCESS_DENIED');
+    } elseif (strpos($errorMsg, 'Cannot modify') !== false) {
+        sendError($errorMsg, 400, 'ORDER_LOCKED');
+    } elseif (strpos($errorMsg, 'required') !== false || strpos($errorMsg, 'Invalid') !== false) {
+        sendError($errorMsg, 400, 'VALIDATION_ERROR');
+    } else {
+        sendError('Failed to update order', 500, 'UPDATE_FAILED');
+    }
 }
 ?>

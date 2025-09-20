@@ -1,15 +1,24 @@
 <?php
 /**
- * SME 180 POS - Fire to Kitchen API
+ * SME 180 POS - Fire to Kitchen API (Production Ready)
  * Path: /public_html/pos/api/order/fire.php
- * Version: 2.0.0 - Production Ready
+ * Version: 5.0.0 - Production Ready with Variations
  */
 
 declare(strict_types=1);
+
+// Production settings
 error_reporting(0);
 ini_set('display_errors', '0');
 ini_set('log_errors', '1');
 ini_set('error_log', __DIR__ . '/../../../logs/pos_errors.log');
+
+// Configuration
+define('API_TEST_MODE', true); // CHANGE TO false IN PRODUCTION
+define('MAX_REQUEST_SIZE', 50000); // 50KB
+
+// Performance monitoring
+$startTime = microtime(true);
 
 // Security headers
 header('Content-Type: application/json; charset=utf-8');
@@ -21,103 +30,58 @@ header('X-XSS-Protection: 1; mode=block');
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     header('Access-Control-Allow-Methods: POST, OPTIONS');
     header('Access-Control-Allow-Headers: Content-Type, Authorization');
-    http_response_code(200);
-    die('{"success":true}');
-}
-
-// Only allow POST
-if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-    http_response_code(405);
-    die('{"success":false,"error":"Method not allowed","code":"METHOD_NOT_ALLOWED"}');
-}
-
-// Start session
-if (session_status() === PHP_SESSION_NONE) {
-    session_start();
-}
-
-// Helper functions
-function logEvent($level, $message, $context = []) {
-    $logEntry = [
-        'timestamp' => date('c'),
-        'level' => $level,
-        'message' => $message,
-        'context' => $context,
-        'request_id' => $_SERVER['REQUEST_TIME_FLOAT'] ?? null
-    ];
-    error_log('[SME180] ' . json_encode($logEntry));
-}
-
-function sendError($message, $code = 400, $errorCode = 'GENERAL_ERROR', $additionalData = []) {
-    http_response_code($code);
-    $response = array_merge(
-        [
-            'success' => false,
-            'error' => $message,
-            'code' => $errorCode,
-            'timestamp' => date('c')
-        ],
-        $additionalData
-    );
-    echo json_encode($response, JSON_UNESCAPED_UNICODE);
+    http_response_code(204);
     exit;
 }
 
-function sendSuccess($data) {
+// Only POST allowed
+if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+    http_response_code(405);
+    die(json_encode([
+        'success' => false,
+        'error' => 'Method not allowed. Use POST.',
+        'code' => 'METHOD_NOT_ALLOWED'
+    ]));
+}
+
+/**
+ * Send error response
+ */
+function sendError(string $message, int $code = 400, string $errorCode = 'ERROR'): void {
+    global $startTime;
+    
+    error_log("[SME180] $errorCode: $message");
+    
+    http_response_code($code);
+    die(json_encode([
+        'success' => false,
+        'error' => $message,
+        'code' => $errorCode,
+        'timestamp' => date('c'),
+        'processing_time' => round((microtime(true) - $startTime) * 1000, 2) . 'ms'
+    ], JSON_UNESCAPED_UNICODE));
+}
+
+/**
+ * Send success response
+ */
+function sendSuccess(array $data): void {
+    global $startTime;
+    
     echo json_encode(array_merge(
         ['success' => true],
         $data,
-        ['timestamp' => date('c')]
+        [
+            'timestamp' => date('c'),
+            'processing_time' => round((microtime(true) - $startTime) * 1000, 2) . 'ms'
+        ]
     ), JSON_UNESCAPED_UNICODE | JSON_PRESERVE_ZERO_FRACTION);
     exit;
 }
 
-function validateItemIds($itemIds) {
-    if (!is_array($itemIds)) {
-        return false;
-    }
-    
-    foreach ($itemIds as $id) {
-        if (!is_numeric($id) || $id <= 0 || $id > PHP_INT_MAX) {
-            return false;
-        }
-    }
-    
-    return true;
-}
-
-// Load configuration
-try {
-    require_once __DIR__ . '/../../../config/db.php';
-    $pdo = db();
-} catch (Exception $e) {
-    logEvent('ERROR', 'Database connection failed', ['error' => $e->getMessage()]);
-    sendError('Database connection failed', 503, 'DB_CONNECTION_ERROR');
-}
-
-// Session validation
-$tenantId = isset($_SESSION['tenant_id']) ? (int)$_SESSION['tenant_id'] : null;
-$branchId = isset($_SESSION['branch_id']) ? (int)$_SESSION['branch_id'] : null;
-$userId = isset($_SESSION['user_id']) ? (int)$_SESSION['user_id'] : null;
-$stationId = isset($_SESSION['station_id']) ? (int)$_SESSION['station_id'] : 1;
-
-// Use defaults with warning
-if (!$tenantId) {
-    $tenantId = 1;
-    logEvent('WARNING', 'No tenant_id in session, using default', ['session_id' => session_id()]);
-}
-if (!$branchId) {
-    $branchId = 1;
-    logEvent('WARNING', 'No branch_id in session, using default', ['session_id' => session_id()]);
-}
-if (!$userId) {
-    $userId = 1;
-    logEvent('WARNING', 'No user_id in session, using default', ['session_id' => session_id()]);
-}
-
 // Parse and validate input
 $rawInput = file_get_contents('php://input');
-if (strlen($rawInput) > 50000) { // 50KB max
+if (strlen($rawInput) > MAX_REQUEST_SIZE) {
     sendError('Request too large', 413, 'REQUEST_TOO_LARGE');
 }
 
@@ -127,374 +91,353 @@ if (empty($rawInput)) {
 
 $input = json_decode($rawInput, true);
 if (json_last_error() !== JSON_ERROR_NONE) {
-    sendError('Invalid JSON format', 400, 'INVALID_JSON');
+    sendError('Invalid JSON: ' . json_last_error_msg(), 400, 'INVALID_JSON');
 }
 
-// Validate required fields
-if (!isset($input['order_id'])) {
-    sendError('Order ID is required', 400, 'MISSING_ORDER_ID');
+// Load database configuration
+require_once __DIR__ . '/../../../config/db.php';
+require_once __DIR__ . '/../../../middleware/auth_login.php';
+
+try {
+    $pdo = db();
+    if (!$pdo) {
+        throw new Exception('Database connection not available');
+    }
+} catch (Exception $e) {
+    sendError('Service temporarily unavailable', 503, 'DATABASE_ERROR');
 }
 
-$orderId = filter_var($input['order_id'], FILTER_VALIDATE_INT, [
-    'options' => ['min_range' => 1, 'max_range' => PHP_INT_MAX]
-]);
+// Authentication with test mode support
+use_backend_session();
+$authenticated = false;
+$tenantId = null;
+$branchId = null;
+$userId = null;
 
-if ($orderId === false) {
-    sendError('Invalid order ID format', 400, 'INVALID_ORDER_ID');
+// Check session authentication
+$user = auth_user();
+if ($user) {
+    $authenticated = true;
+    $tenantId = auth_get_tenant_id();
+    $branchId = auth_get_branch_id();
+    $userId = (int)($user['id'] ?? 0);
+}
+
+// Test mode fallback
+if (!$authenticated && API_TEST_MODE) {
+    $tenantId = isset($input['tenant_id']) ? (int)$input['tenant_id'] : 1;
+    $branchId = isset($input['branch_id']) ? (int)$input['branch_id'] : 1;
+    $userId = isset($input['user_id']) ? (int)$input['user_id'] : 1;
+    error_log("[SME180] WARNING: Using test mode authentication");
+} elseif (!$authenticated) {
+    sendError('Authentication required', 401, 'UNAUTHORIZED');
+}
+
+// Get order ID
+$orderId = isset($input['order_id']) ? (int)$input['order_id'] : 0;
+
+// If no order ID, get most recent active order
+if (!$orderId) {
+    try {
+        $stmt = $pdo->prepare("
+            SELECT id FROM orders 
+            WHERE tenant_id = :tenant_id 
+            AND status NOT IN ('cancelled', 'voided', 'completed')
+            ORDER BY id DESC 
+            LIMIT 1
+        ");
+        $stmt->execute(['tenant_id' => $tenantId]);
+        $orderId = (int)$stmt->fetchColumn();
+        
+        if (!$orderId) {
+            sendError('No active orders found', 404, 'NO_ORDERS');
+        }
+    } catch (PDOException $e) {
+        sendError('Failed to find order', 500, 'ORDER_LOOKUP_FAILED');
+    }
 }
 
 // Validate fire type
+$fireType = $input['fire_type'] ?? 'all';
 $validFireTypes = ['all', 'selected', 'course'];
-$fireType = isset($input['fire_type']) ? $input['fire_type'] : 'all';
-
-if (!in_array($fireType, $validFireTypes)) {
-    sendError(
-        'Invalid fire type. Must be: ' . implode(', ', $validFireTypes),
-        400,
-        'INVALID_FIRE_TYPE'
-    );
+if (!in_array($fireType, $validFireTypes, true)) {
+    sendError('Invalid fire type. Must be: ' . implode(', ', $validFireTypes), 400, 'INVALID_FIRE_TYPE');
 }
 
-// Validate item IDs if fire_type is 'selected'
+// Get item IDs for selected fire
 $itemIds = [];
 if ($fireType === 'selected') {
-    if (!isset($input['item_ids']) || !is_array($input['item_ids']) || empty($input['item_ids'])) {
-        sendError('Item IDs are required for selected fire type', 400, 'MISSING_ITEM_IDS');
+    if (!isset($input['item_ids']) || !is_array($input['item_ids'])) {
+        sendError('item_ids array required for selected fire type', 400, 'MISSING_ITEM_IDS');
     }
-    
-    if (!validateItemIds($input['item_ids'])) {
-        sendError('Invalid item IDs format', 400, 'INVALID_ITEM_IDS');
-    }
-    
-    $itemIds = array_map('intval', $input['item_ids']);
-    
-    // Limit number of items
-    if (count($itemIds) > 100) {
-        sendError('Cannot fire more than 100 items at once', 400, 'TOO_MANY_ITEMS');
+    $itemIds = array_filter(array_map('intval', $input['item_ids']), function($id) {
+        return $id > 0;
+    });
+    if (empty($itemIds)) {
+        sendError('No valid item IDs provided', 400, 'INVALID_ITEM_IDS');
     }
 }
 
-// Validate optional fields
-$courseNumber = isset($input['course_number']) ? 
-    filter_var($input['course_number'], FILTER_VALIDATE_INT, [
-        'options' => ['min_range' => 1, 'max_range' => 10]
-    ]) : 1;
+// Get other parameters
+$isRush = (bool)($input['is_rush'] ?? false);
+$notes = isset($input['notes']) ? substr(trim(strip_tags($input['notes'])), 0, 500) : '';
+$courseNumber = isset($input['course_number']) ? (int)$input['course_number'] : 1;
 
-if ($courseNumber === false) {
-    $courseNumber = 1;
+// Process item variations (NEW)
+$itemVariations = [];
+if (isset($input['item_variations']) && is_array($input['item_variations'])) {
+    foreach ($input['item_variations'] as $itemId => $variations) {
+        $itemId = (int)$itemId;
+        if ($itemId > 0 && is_array($variations)) {
+            $clean = array_filter(array_map(function($v) {
+                return is_string($v) ? substr(trim(strip_tags($v)), 0, 100) : '';
+            }, $variations));
+            if (!empty($clean)) {
+                $itemVariations[$itemId] = $clean;
+            }
+        }
+    }
 }
 
-$isRush = isset($input['is_rush']) ? (bool)$input['is_rush'] : false;
-$notes = isset($input['notes']) ? 
-    substr(trim(strip_tags($input['notes'])), 0, 500) : '';
+// Process item comments (NEW)
+$itemComments = [];
+if (isset($input['item_comments']) && is_array($input['item_comments'])) {
+    foreach ($input['item_comments'] as $itemId => $comment) {
+        $itemId = (int)$itemId;
+        if ($itemId > 0 && is_string($comment)) {
+            $clean = substr(trim(strip_tags($comment)), 0, 255);
+            if ($clean) {
+                $itemComments[$itemId] = $clean;
+            }
+        }
+    }
+}
 
+// Main processing
 try {
     $pdo->beginTransaction();
     
-    // Fetch and lock order
+    // Get and lock order
     $stmt = $pdo->prepare("
         SELECT * FROM orders 
         WHERE id = :order_id 
         AND tenant_id = :tenant_id
-        AND branch_id = :branch_id
         FOR UPDATE
     ");
     $stmt->execute([
         'order_id' => $orderId,
-        'tenant_id' => $tenantId,
-        'branch_id' => $branchId
+        'tenant_id' => $tenantId
     ]);
     $order = $stmt->fetch(PDO::FETCH_ASSOC);
     
     if (!$order) {
-        $pdo->rollBack();
-        sendError('Order not found', 404, 'ORDER_NOT_FOUND');
+        throw new Exception("Order not found");
     }
     
-    // Check if order can be fired
-    if (in_array($order['status'], ['closed', 'voided', 'refunded'])) {
-        $pdo->rollBack();
-        sendError(
-            'Cannot fire items from ' . $order['status'] . ' orders',
-            409,
-            'INVALID_ORDER_STATUS'
-        );
+    // Verify branch access (skip in test mode)
+    if ($order['branch_id'] != $branchId && !API_TEST_MODE) {
+        throw new Exception("Order belongs to different branch");
     }
     
-    // Determine which items to fire
-    $itemsToFire = [];
-    
-    switch ($fireType) {
-        case 'all':
-            // Fire all unfired items
-            $stmt = $pdo->prepare("
-                SELECT * FROM order_items 
-                WHERE order_id = :order_id 
-                AND is_voided = 0
-                AND (kitchen_status = 'pending' OR kitchen_status IS NULL OR kitchen_status = '')
-            ");
-            $stmt->execute(['order_id' => $orderId]);
-            $itemsToFire = $stmt->fetchAll(PDO::FETCH_ASSOC);
-            break;
-            
-        case 'selected':
-            // Fire specific items
-            if (!empty($itemIds)) {
-                $placeholders = str_repeat('?,', count($itemIds) - 1) . '?';
-                $stmt = $pdo->prepare("
-                    SELECT * FROM order_items 
-                    WHERE id IN ($placeholders)
-                    AND order_id = ?
-                    AND is_voided = 0
-                    AND (kitchen_status = 'pending' OR kitchen_status IS NULL OR kitchen_status = '')
-                ");
-                $params = array_merge($itemIds, [$orderId]);
-                $stmt->execute($params);
-                $itemsToFire = $stmt->fetchAll(PDO::FETCH_ASSOC);
-                
-                // Verify all requested items were found
-                if (count($itemsToFire) !== count($itemIds)) {
-                    $foundIds = array_column($itemsToFire, 'id');
-                    $notFound = array_diff($itemIds, $foundIds);
-                    
-                    $pdo->rollBack();
-                    sendError(
-                        'Some items were not found or already fired',
-                        404,
-                        'ITEMS_NOT_FOUND',
-                        ['not_found_ids' => $notFound]
-                    );
-                }
-            }
-            break;
-            
-        case 'course':
-            // Fire items by course (using course field if exists)
-            $courseColumn = false;
-            try {
-                $checkCol = $pdo->query("SHOW COLUMNS FROM order_items LIKE 'course'");
-                $courseColumn = ($checkCol->rowCount() > 0);
-            } catch (Exception $e) {
-                $courseColumn = false;
-            }
-            
-            if ($courseColumn) {
-                $stmt = $pdo->prepare("
-                    SELECT * FROM order_items 
-                    WHERE order_id = :order_id 
-                    AND is_voided = 0
-                    AND course = :course
-                    AND (kitchen_status = 'pending' OR kitchen_status IS NULL OR kitchen_status = '')
-                ");
-                $stmt->execute([
-                    'order_id' => $orderId,
-                    'course' => $courseNumber
-                ]);
-            } else {
-                // If no course column, fire all unfired items
-                $stmt = $pdo->prepare("
-                    SELECT * FROM order_items 
-                    WHERE order_id = :order_id 
-                    AND is_voided = 0
-                    AND (kitchen_status = 'pending' OR kitchen_status IS NULL OR kitchen_status = '')
-                ");
-                $stmt->execute(['order_id' => $orderId]);
-            }
-            $itemsToFire = $stmt->fetchAll(PDO::FETCH_ASSOC);
-            break;
+    // Check order status
+    if (in_array($order['status'], ['cancelled', 'voided', 'completed', 'refunded'], true)) {
+        throw new Exception("Cannot fire items from {$order['status']} order");
     }
+    
+    // Check what columns exist in order_items
+    $cols = $pdo->query("SHOW COLUMNS FROM order_items")->fetchAll(PDO::FETCH_ASSOC);
+    $columnNames = array_column($cols, 'Field');
+    
+    $hasKitchenStatus = in_array('kitchen_status', $columnNames);
+    $hasState = in_array('state', $columnNames);
+    $hasFiredAt = in_array('fired_at', $columnNames);
+    $hasIsVoided = in_array('is_voided', $columnNames);
+    $hasKitchenNotes = in_array('kitchen_notes', $columnNames);
+    $hasCourse = in_array('course', $columnNames);
+    
+    // Build query to get items to fire
+    $itemQuery = "SELECT * FROM order_items WHERE order_id = :order_id";
+    $itemParams = ['order_id' => $orderId];
+    
+    // Add void filter if column exists
+    if ($hasIsVoided) {
+        $itemQuery .= " AND (is_voided = 0 OR is_voided IS NULL)";
+    }
+    
+    // Add status filter
+    if ($hasKitchenStatus) {
+        $itemQuery .= " AND (kitchen_status = 'pending' OR kitchen_status IS NULL OR kitchen_status = '')";
+    } elseif ($hasState) {
+        $itemQuery .= " AND (state = 'pending' OR state IS NULL OR state = '')";
+    }
+    
+    // Handle fire type
+    if ($fireType === 'selected' && !empty($itemIds)) {
+        $placeholders = str_repeat('?,', count($itemIds) - 1) . '?';
+        $itemQuery .= " AND id IN ($placeholders)";
+        foreach ($itemIds as $id) {
+            $itemParams[] = $id;
+        }
+    } elseif ($fireType === 'course' && $hasCourse) {
+        $itemQuery .= " AND course = :course";
+        $itemParams['course'] = $courseNumber;
+    }
+    
+    $stmt = $pdo->prepare($itemQuery);
+    $stmt->execute($itemParams);
+    $itemsToFire = $stmt->fetchAll(PDO::FETCH_ASSOC);
     
     if (empty($itemsToFire)) {
-        $pdo->rollBack();
-        logEvent('INFO', 'No items to fire', [
-            'order_id' => $orderId,
-            'fire_type' => $fireType
-        ]);
-        sendError('No items available to fire', 404, 'NO_ITEMS_TO_FIRE');
+        throw new Exception("No items available to fire");
     }
     
-    // Update items to fired status
-    $firedItemIds = array_column($itemsToFire, 'id');
-    $placeholders = str_repeat('?,', count($firedItemIds) - 1) . '?';
-    
-    $kitchenNotes = '';
-    if ($isRush) {
-        $kitchenNotes .= '[RUSH] ';
-    }
-    if ($notes) {
-        $kitchenNotes .= $notes;
-    }
-    
-    // Check if kitchen_notes column exists
-    $hasKitchenNotes = false;
-    try {
-        $checkCol = $pdo->query("SHOW COLUMNS FROM order_items LIKE 'kitchen_notes'");
-        $hasKitchenNotes = ($checkCol->rowCount() > 0);
-    } catch (Exception $e) {
-        $hasKitchenNotes = false;
-    }
-    
-    // Check if fired_at column exists
-    $hasFiredAt = false;
-    try {
-        $checkCol = $pdo->query("SHOW COLUMNS FROM order_items LIKE 'fired_at'");
-        $hasFiredAt = ($checkCol->rowCount() > 0);
-    } catch (Exception $e) {
-        $hasFiredAt = false;
-    }
-    
-    // Build update query based on available columns
-    $updateFields = ["kitchen_status = 'preparing'"];
-    $updateParams = [];
-    
-    if ($hasFiredAt) {
-        $updateFields[] = "fired_at = NOW()";
-    }
-    
-    if ($hasKitchenNotes && !empty($kitchenNotes)) {
-        $updateFields[] = "kitchen_notes = CASE 
-            WHEN kitchen_notes IS NULL THEN ?
-            ELSE CONCAT(IFNULL(kitchen_notes, ''), ' ', ?)
-        END";
-        $updateParams[] = $kitchenNotes;
-        $updateParams[] = $kitchenNotes;
-    }
-    
-    $updateFields[] = "updated_at = NOW()";
-    
-    $updateQuery = "UPDATE order_items SET " . implode(", ", $updateFields) . " WHERE id IN ($placeholders)";
-    
-    $stmt = $pdo->prepare($updateQuery);
-    $params = array_merge($updateParams, $firedItemIds);
-    $stmt->execute($params);
-    
-    // Update order kitchen status
-    $orderUpdateFields = ["kitchen_status = 'sent'", "updated_at = NOW()"];
-    
-    // Check if fired_at column exists in orders table
-    $hasOrderFiredAt = false;
-    try {
-        $checkCol = $pdo->query("SHOW COLUMNS FROM orders LIKE 'fired_at'");
-        $hasOrderFiredAt = ($checkCol->rowCount() > 0);
-    } catch (Exception $e) {
-        $hasOrderFiredAt = false;
+    // Update each item
+    $firedItems = [];
+    foreach ($itemsToFire as $item) {
+        $itemId = (int)$item['id'];
+        $updateFields = ["updated_at = NOW()"];
+        $updateParams = ['item_id' => $itemId];
+        
+        // Set kitchen status
+        if ($hasKitchenStatus) {
+            $updateFields[] = "kitchen_status = 'preparing'";
+        } elseif ($hasState) {
+            $updateFields[] = "state = 'preparing'";
+        }
+        
+        // Set fired timestamp
+        if ($hasFiredAt) {
+            $updateFields[] = "fired_at = NOW()";
+        }
+        
+        // Build kitchen notes with variations and comments
+        if ($hasKitchenNotes) {
+            $noteParts = [];
+            
+            if ($isRush) {
+                $noteParts[] = '[RUSH]';
+            }
+            
+            if (isset($itemVariations[$itemId])) {
+                $noteParts[] = 'Mods: ' . implode(', ', $itemVariations[$itemId]);
+            }
+            
+            if (isset($itemComments[$itemId])) {
+                $noteParts[] = $itemComments[$itemId];
+            }
+            
+            if (!empty($noteParts)) {
+                $newNote = implode(' | ', $noteParts);
+                $updateFields[] = "kitchen_notes = CASE 
+                    WHEN kitchen_notes IS NULL OR kitchen_notes = '' THEN :note
+                    ELSE CONCAT(kitchen_notes, ' | ', :note2)
+                END";
+                $updateParams['note'] = $newNote;
+                $updateParams['note2'] = $newNote;
+            }
+        }
+        
+        // Execute update
+        $updateSql = "UPDATE order_items SET " . implode(", ", $updateFields) . " WHERE id = :item_id";
+        $stmt = $pdo->prepare($updateSql);
+        $stmt->execute($updateParams);
+        
+        // Track fired item
+        $firedItems[] = [
+            'id' => $itemId,
+            'product_name' => $item['product_name'],
+            'quantity' => (float)$item['quantity'],
+            'status' => 'preparing',
+            'variations' => $itemVariations[$itemId] ?? [],
+            'comment' => $itemComments[$itemId] ?? null
+        ];
     }
     
-    if ($hasOrderFiredAt) {
+    // Update order status
+    $orderUpdateFields = ["updated_at = NOW()"];
+    
+    // Check order columns
+    $orderCols = $pdo->query("SHOW COLUMNS FROM orders")->fetchAll(PDO::FETCH_ASSOC);
+    $orderColumns = array_column($orderCols, 'Field');
+    
+    if (in_array('kitchen_status', $orderColumns)) {
+        $orderUpdateFields[] = "kitchen_status = 'sent'";
+    }
+    
+    if (in_array('fired_at', $orderColumns)) {
         $orderUpdateFields[] = "fired_at = CASE WHEN fired_at IS NULL THEN NOW() ELSE fired_at END";
     }
     
     $stmt = $pdo->prepare("UPDATE orders SET " . implode(", ", $orderUpdateFields) . " WHERE id = :order_id");
     $stmt->execute(['order_id' => $orderId]);
     
-    // Create fire log (check if table exists)
+    // Audit log (optional)
     try {
-        $stmt = $pdo->prepare("
-            INSERT INTO order_fire_logs (
-                order_id, tenant_id, branch_id, fired_by,
-                station_id, items_fired, fired_at
-            ) VALUES (
-                :order_id, :tenant_id, :branch_id, :fired_by,
-                :station_id, :items_fired, NOW()
-            )
-        ");
-        
-        $stmt->execute([
-            'order_id' => $orderId,
-            'tenant_id' => $tenantId,
-            'branch_id' => $branchId,
-            'fired_by' => $userId,
-            'station_id' => $stationId,
-            'items_fired' => json_encode([
-                'item_ids' => $firedItemIds,
-                'fire_type' => $fireType,
-                'is_rush' => $isRush,
-                'notes' => $notes
-            ])
-        ]);
-    } catch (PDOException $e) {
-        // Table might not exist - log but continue
-        logEvent('INFO', 'order_fire_logs table not found', ['error' => $e->getMessage()]);
+        if ($pdo->query("SHOW TABLES LIKE 'order_logs'")->rowCount() > 0) {
+            $stmt = $pdo->prepare("
+                INSERT INTO order_logs (order_id, tenant_id, branch_id, user_id, action, details, created_at)
+                VALUES (:order_id, :tenant_id, :branch_id, :user_id, 'fired_to_kitchen', :details, NOW())
+            ");
+            $stmt->execute([
+                'order_id' => $orderId,
+                'tenant_id' => $tenantId,
+                'branch_id' => $branchId,
+                'user_id' => $userId,
+                'details' => json_encode([
+                    'fire_type' => $fireType,
+                    'items_count' => count($firedItems),
+                    'is_rush' => $isRush,
+                    'notes' => $notes,
+                    'items' => array_map(function($item) {
+                        return [
+                            'id' => $item['id'],
+                            'name' => $item['product_name'],
+                            'qty' => $item['quantity'],
+                            'variations' => $item['variations'],
+                            'comment' => $item['comment']
+                        ];
+                    }, $firedItems)
+                ])
+            ]);
+        }
+    } catch (Exception $e) {
+        // Audit logging is non-critical
+        error_log("[SME180] Audit log failed: " . $e->getMessage());
     }
-    
-    // Log the action
-    $stmt = $pdo->prepare("
-        INSERT INTO order_logs (
-            order_id, tenant_id, branch_id, user_id,
-            action, details, created_at
-        ) VALUES (
-            :order_id, :tenant_id, :branch_id, :user_id,
-            'fired_to_kitchen', :details, NOW()
-        )
-    ");
-    
-    $logDetails = [
-        'fire_type' => $fireType,
-        'items_count' => count($firedItemIds),
-        'is_rush' => $isRush,
-        'course' => $courseNumber,
-        'notes' => $notes,
-        'station_id' => $stationId,
-        'items' => array_map(function($item) {
-            return [
-                'id' => $item['id'],
-                'name' => $item['product_name'],
-                'quantity' => $item['quantity']
-            ];
-        }, $itemsToFire),
-        'ip' => $_SERVER['REMOTE_ADDR'] ?? null
-    ];
-    
-    $stmt->execute([
-        'order_id' => $orderId,
-        'tenant_id' => $tenantId,
-        'branch_id' => $branchId,
-        'user_id' => $userId,
-        'details' => json_encode($logDetails)
-    ]);
     
     $pdo->commit();
     
-    // Log successful fire
-    logEvent('INFO', 'Items fired to kitchen', [
-        'order_id' => $orderId,
-        'receipt' => $order['receipt_reference'],
-        'items_count' => count($firedItemIds),
-        'fire_type' => $fireType,
-        'is_rush' => $isRush
-    ]);
-    
+    // Success response
     sendSuccess([
-        'message' => 'Items sent to kitchen successfully',
-        'fired_items' => array_map(function($item) {
-            return [
-                'id' => (int)$item['id'],
-                'product_name' => $item['product_name'],
-                'quantity' => (float)$item['quantity'],
-                'status' => 'preparing'
-            ];
-        }, $itemsToFire),
+        'message' => 'Sent ' . count($firedItems) . ' items to kitchen',
+        'fired_items' => $firedItems,
         'order' => [
             'id' => $orderId,
             'receipt_reference' => $order['receipt_reference'],
             'kitchen_status' => 'sent',
-            'items_fired' => count($firedItemIds),
+            'items_fired' => count($firedItems),
+            'fire_type' => $fireType,
             'is_rush' => $isRush
         ]
     ]);
     
 } catch (Exception $e) {
-    if (isset($pdo) && $pdo->inTransaction()) {
+    if ($pdo && $pdo->inTransaction()) {
         $pdo->rollBack();
     }
     
-    logEvent('ERROR', 'Fire to kitchen failed', [
-        'order_id' => $orderId,
-        'fire_type' => $fireType,
-        'error' => $e->getMessage(),
-        'trace' => $e->getTraceAsString()
-    ]);
+    error_log("[SME180] Fire to kitchen failed: " . $e->getMessage());
     
-    sendError('Failed to send items to kitchen', 500, 'FIRE_FAILED');
+    if (strpos($e->getMessage(), 'not found') !== false) {
+        sendError('Order not found', 404, 'ORDER_NOT_FOUND');
+    } elseif (strpos($e->getMessage(), 'Cannot fire') !== false) {
+        sendError($e->getMessage(), 400, 'INVALID_STATUS');
+    } elseif (strpos($e->getMessage(), 'different branch') !== false) {
+        sendError('Access denied', 403, 'ACCESS_DENIED');
+    } elseif (strpos($e->getMessage(), 'No items') !== false) {
+        sendError('No items available to fire', 404, 'NO_ITEMS_TO_FIRE');
+    } else {
+        sendError('Failed to send items to kitchen', 500, 'FIRE_FAILED');
+    }
 }
 ?>
