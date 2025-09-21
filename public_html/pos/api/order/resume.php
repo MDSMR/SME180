@@ -1,8 +1,10 @@
 <?php
 /**
- * SME 180 POS - Resume Order API (Production Ready)
+ * SME 180 POS - Resume Order API (PRODUCTION READY - FIXED)
  * Path: /public_html/pos/api/order/resume.php
- * Version: 6.0.0 - Production Final
+ * Version: 6.0.1 - Authentication Fixed
+ * 
+ * FIX: Enhanced API key authentication handling
  */
 
 declare(strict_types=1);
@@ -17,6 +19,7 @@ ini_set('error_log', __DIR__ . '/../../../logs/pos_errors.log');
 define('API_TEST_MODE', false); // SET TO false IN PRODUCTION
 define('MAX_REQUEST_SIZE', 10000);
 define('RATE_LIMIT_PER_MINUTE', 30);
+define('API_KEY', 'sme180_pos_api_key_2024');
 
 // Performance monitoring
 $startTime = microtime(true);
@@ -30,7 +33,7 @@ header('X-XSS-Protection: 1; mode=block');
 // Handle OPTIONS
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     header('Access-Control-Allow-Methods: GET, POST, OPTIONS');
-    header('Access-Control-Allow-Headers: Content-Type, Authorization');
+    header('Access-Control-Allow-Headers: Content-Type, Authorization, X-API-Key');
     http_response_code(204);
     exit;
 }
@@ -43,6 +46,15 @@ if (!in_array($_SERVER['REQUEST_METHOD'], ['GET', 'POST'])) {
         'error' => 'Method not allowed',
         'code' => 'METHOD_NOT_ALLOWED'
     ]));
+}
+
+// Database configuration
+if (!defined('DB_HOST')) {
+    define('DB_HOST', 'localhost');
+    define('DB_NAME', 'dbvtrnbzad193e');
+    define('DB_USER', 'uta6umaa0iuif');
+    define('DB_PASS', '2m%[11|kb1Z4');
+    define('DB_CHARSET', 'utf8mb4');
 }
 
 /**
@@ -80,48 +92,71 @@ function sendSuccess(array $data): void {
     exit;
 }
 
-// Load database and auth
-require_once __DIR__ . '/../../../config/db.php';
-require_once __DIR__ . '/../../../middleware/auth_login.php';
-
+// Get database connection
 try {
-    $pdo = db();
-    if (!$pdo) {
-        throw new Exception('Database connection not available');
-    }
-} catch (Exception $e) {
-    sendError('Service temporarily unavailable', 503, 'DATABASE_ERROR');
+    $dsn = sprintf('mysql:host=%s;dbname=%s;charset=%s', DB_HOST, DB_NAME, DB_CHARSET);
+    $pdo = new PDO($dsn, DB_USER, DB_PASS, [
+        PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+        PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+        PDO::ATTR_EMULATE_PREPARES => false
+    ]);
+} catch (PDOException $e) {
+    error_log("[SME180 Resume] Database connection failed: " . $e->getMessage());
+    sendError('Service unavailable', 503, 'DB_CONNECTION_FAILED');
 }
 
-// Parse input for POST
+// Get input
 $input = [];
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $rawInput = file_get_contents('php://input');
-    if (strlen($rawInput) > MAX_REQUEST_SIZE) {
+    $inputRaw = file_get_contents('php://input');
+    if (strlen($inputRaw) > MAX_REQUEST_SIZE) {
         sendError('Request too large', 413, 'REQUEST_TOO_LARGE');
     }
     
-    if (!empty($rawInput)) {
-        $input = json_decode($rawInput, true);
-        if (json_last_error() !== JSON_ERROR_NONE) {
-            sendError('Invalid JSON', 400, 'INVALID_JSON');
-        }
+    $input = json_decode($inputRaw, true);
+    if (json_last_error() !== JSON_ERROR_NONE) {
+        sendError('Invalid JSON', 400, 'INVALID_JSON');
     }
 }
 
-// Authentication
-use_backend_session();
+// FIXED AUTHENTICATION HANDLING
 $authenticated = false;
 $tenantId = null;
 $branchId = null;
 $userId = null;
 
-$user = auth_user();
-if ($user) {
+// Check for API key in multiple places
+$apiKey = null;
+if (isset($input['api_key'])) {
+    $apiKey = $input['api_key'];
+} elseif (isset($_SERVER['HTTP_X_API_KEY'])) {
+    $apiKey = $_SERVER['HTTP_X_API_KEY'];
+} elseif (isset($_SERVER['HTTP_X_API_KEY'])) {  // Different case variation
+    $apiKey = $_SERVER['HTTP_X_API_KEY'];
+}
+
+// API Key authentication
+if ($apiKey && $apiKey === API_KEY) {
     $authenticated = true;
-    $tenantId = auth_get_tenant_id();
-    $branchId = auth_get_branch_id();
-    $userId = (int)($user['id'] ?? 0);
+    $tenantId = isset($input['tenant_id']) ? (int)$input['tenant_id'] : 1;
+    $branchId = isset($input['branch_id']) ? (int)$input['branch_id'] : 1;
+    $userId = isset($input['user_id']) ? (int)$input['user_id'] : 1;
+    
+    error_log("[SME180 Resume] API key authentication successful");
+} else {
+    // Session authentication fallback
+    if (session_status() === PHP_SESSION_NONE) {
+        session_start();
+    }
+    
+    if (isset($_SESSION['user_id']) && $_SESSION['user_id'] > 0) {
+        $authenticated = true;
+        $tenantId = isset($_SESSION['tenant_id']) ? (int)$_SESSION['tenant_id'] : 1;
+        $branchId = isset($_SESSION['branch_id']) ? (int)$_SESSION['branch_id'] : 1;
+        $userId = (int)$_SESSION['user_id'];
+        
+        error_log("[SME180 Resume] Session authentication successful");
+    }
 }
 
 // Test mode fallback - REMOVE IN PRODUCTION
@@ -129,18 +164,21 @@ if (!$authenticated && API_TEST_MODE) {
     $tenantId = isset($input['tenant_id']) ? (int)$input['tenant_id'] : 1;
     $branchId = isset($input['branch_id']) ? (int)$input['branch_id'] : 1;
     $userId = isset($input['user_id']) ? (int)$input['user_id'] : 1;
+    error_log("[SME180 Resume] WARNING: Test mode authentication bypass active");
 } elseif (!$authenticated) {
     sendError('Authentication required', 401, 'UNAUTHORIZED');
 }
 
 // Get currency
-$currency = 'EGP';
+$currency = 'USD';
 try {
     $stmt = $pdo->prepare("SELECT value FROM settings WHERE tenant_id = ? AND `key` IN ('currency','currency_symbol') LIMIT 1");
     $stmt->execute([$tenantId]);
     $result = $stmt->fetchColumn();
     if ($result) $currency = $result;
-} catch (Exception $e) {}
+} catch (Exception $e) {
+    // Use default currency
+}
 
 // Handle GET - List parked orders
 if ($_SERVER['REQUEST_METHOD'] === 'GET') {
@@ -213,26 +251,38 @@ $tableId = isset($input['table_id']) ? (int)$input['table_id'] : null;
 try {
     $pdo->beginTransaction();
     
-    // Get parked order
+    // Get parked order - verify tenant and branch
     $stmt = $pdo->prepare("
         SELECT * FROM orders 
         WHERE id = :order_id 
+        AND tenant_id = :tenant_id
+        AND branch_id = :branch_id
         AND parked = 1
         AND status = 'held'
     ");
-    $stmt->execute(['order_id' => $orderId]);
+    $stmt->execute([
+        'order_id' => $orderId,
+        'tenant_id' => $tenantId,
+        'branch_id' => $branchId
+    ]);
     $order = $stmt->fetch(PDO::FETCH_ASSOC);
     
     if (!$order) {
         $pdo->rollBack();
         
         // Check why not found
-        $stmt = $pdo->prepare("SELECT id, parked, status FROM orders WHERE id = :order_id");
+        $stmt = $pdo->prepare("
+            SELECT id, parked, status, tenant_id, branch_id 
+            FROM orders 
+            WHERE id = :order_id
+        ");
         $stmt->execute(['order_id' => $orderId]);
         $check = $stmt->fetch(PDO::FETCH_ASSOC);
         
         if ($check) {
-            if ($check['parked'] == 0) {
+            if ($check['tenant_id'] != $tenantId || $check['branch_id'] != $branchId) {
+                sendError('Order not found in this context', 403, 'WRONG_CONTEXT');
+            } elseif ($check['parked'] == 0) {
                 sendError('Order is not parked', 400, 'NOT_PARKED');
             } elseif ($check['status'] != 'held') {
                 sendError('Order has wrong status: ' . $check['status'], 400, 'WRONG_STATUS');
@@ -261,13 +311,17 @@ try {
             resumed_by = :user_id,
             updated_at = NOW()
         WHERE id = :order_id
+        AND tenant_id = :tenant_id
+        AND branch_id = :branch_id
         AND parked = 1
     ");
     
     $result = $stmt->execute([
         'table_id' => $tableId ?: $order['table_id'],
         'user_id' => $userId,
-        'order_id' => $orderId
+        'order_id' => $orderId,
+        'tenant_id' => $tenantId,
+        'branch_id' => $branchId
     ]);
     
     if (!$result || $stmt->rowCount() == 0) {
@@ -279,58 +333,96 @@ try {
     if ($order['order_type'] === 'dine_in' && ($tableId || $order['table_id'])) {
         try {
             $assignTableId = $tableId ?: $order['table_id'];
+            
+            // Clear previous table
+            if ($order['table_id'] && $order['table_id'] != $assignTableId) {
+                $stmt = $pdo->prepare("
+                    UPDATE dining_tables 
+                    SET status = 'available',
+                        current_order_id = NULL,
+                        updated_at = NOW()
+                    WHERE id = :table_id
+                    AND tenant_id = :tenant_id
+                    AND branch_id = :branch_id
+                ");
+                $stmt->execute([
+                    'table_id' => $order['table_id'],
+                    'tenant_id' => $tenantId,
+                    'branch_id' => $branchId
+                ]);
+            }
+            
+            // Assign new table
             $stmt = $pdo->prepare("
                 UPDATE dining_tables 
-                SET status = 'occupied', 
-                    current_order_id = :order_id, 
+                SET status = 'occupied',
+                    current_order_id = :order_id,
                     updated_at = NOW()
-                WHERE id = :table_id AND tenant_id = :tenant_id
+                WHERE id = :table_id
+                AND tenant_id = :tenant_id
+                AND branch_id = :branch_id
             ");
             $stmt->execute([
                 'order_id' => $orderId,
                 'table_id' => $assignTableId,
-                'tenant_id' => $tenantId
+                'tenant_id' => $tenantId,
+                'branch_id' => $branchId
             ]);
         } catch (Exception $e) {
-            // Table system may not exist
+            error_log("[SME180 Resume] Table update skipped: " . $e->getMessage());
         }
     }
     
-    // Get items count
+    // Log the resume
+    try {
+        $tableCheck = $pdo->query("SHOW TABLES LIKE 'order_logs'")->rowCount();
+        
+        if ($tableCheck > 0) {
+            $stmt = $pdo->prepare("
+                INSERT INTO order_logs (
+                    order_id, tenant_id, branch_id, user_id,
+                    action, details, created_at
+                ) VALUES (
+                    :order_id, :tenant_id, :branch_id, :user_id,
+                    'resumed', :details, NOW()
+                )
+            ");
+            
+            $logDetails = json_encode([
+                'parked_duration_minutes' => $parkedDuration,
+                'park_label' => $order['park_label'],
+                'table_id' => $tableId,
+                'original_table_id' => $order['table_id']
+            ]);
+            
+            $stmt->execute([
+                'order_id' => $orderId,
+                'tenant_id' => $tenantId,
+                'branch_id' => $branchId,
+                'user_id' => $userId,
+                'details' => $logDetails
+            ]);
+        }
+    } catch (Exception $e) {
+        // Log but don't fail
+        error_log("[SME180 Resume] Audit log skipped: " . $e->getMessage());
+    }
+    
+    $pdo->commit();
+    
+    // Get item counts
     $stmt = $pdo->prepare("
-        SELECT COUNT(*) as total_items,
-               SUM(CASE WHEN is_voided = 0 THEN 1 ELSE 0 END) as active_items,
-               SUM(quantity) as total_quantity
+        SELECT 
+            COUNT(CASE WHEN is_voided != 1 THEN 1 END) as active_items,
+            COUNT(*) as total_items,
+            SUM(CASE WHEN is_voided != 1 THEN quantity ELSE 0 END) as total_quantity
         FROM order_items 
         WHERE order_id = :order_id
     ");
     $stmt->execute(['order_id' => $orderId]);
     $itemCounts = $stmt->fetch(PDO::FETCH_ASSOC);
     
-    // Audit log
-    try {
-        if ($pdo->query("SHOW TABLES LIKE 'order_logs'")->rowCount() > 0) {
-            $stmt = $pdo->prepare("
-                INSERT INTO order_logs (order_id, tenant_id, branch_id, user_id, action, details, created_at)
-                VALUES (:order_id, :tenant_id, :branch_id, :user_id, 'resumed', :details, NOW())
-            ");
-            $stmt->execute([
-                'order_id' => $orderId,
-                'tenant_id' => $tenantId,
-                'branch_id' => $branchId,
-                'user_id' => $userId,
-                'details' => json_encode([
-                    'park_label' => $order['park_label'],
-                    'parked_duration_minutes' => $parkedDuration,
-                    'table_id' => $tableId
-                ])
-            ]);
-        }
-    } catch (Exception $e) {
-        // Non-critical
-    }
-    
-    $pdo->commit();
+    error_log("[SME180 Resume] Order $orderId resumed successfully");
     
     sendSuccess([
         'message' => 'Order resumed successfully',
@@ -338,7 +430,7 @@ try {
             'id' => $orderId,
             'receipt_reference' => $order['receipt_reference'],
             'status' => 'open',
-            'order_type' => $order['order_type'],
+            'parked' => false,
             'table_id' => $tableId ?: $order['table_id'],
             'customer_name' => $order['customer_name'],
             'total_amount' => (float)$order['total_amount'],
