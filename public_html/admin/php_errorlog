@@ -1,0 +1,122 @@
+[13-Aug-2025 20:40:33 Asia/Kuwait] PHP Fatal error:  Uncaught PDOException: SQLSTATE[42S02]: Base table or view not found: 1146 Table 'db7erxssxpfw7b.user_tokens' doesn't exist in /home/customer/www/mohamedk10.sg-host.com/public_html/config/auth.php:85
+Stack trace:
+#0 /home/customer/www/mohamedk10.sg-host.com/public_html/config/auth.php(85): PDO->prepare('SELECT user_id ...')
+#1 /home/customer/www/mohamedk10.sg-host.com/public_html/admin/_auth_bootstrap.php(35): verify_refresh_token('b32f94df779bda9...')
+#2 /home/customer/www/mohamedk10.sg-host.com/public_html/admin/dashboard.php(4): admin_require_auth()
+#3 {main}
+  thrown in /home/customer/www/mohamedk10.sg-host.com/public_html/config/auth.php on line 85
+[13-Aug-2025 20:40:35 Asia/Kuwait] PHP Fatal error:  Uncaught PDOException: SQLSTATE[42S02]: Base table or view not found: 1146 Table 'db7erxssxpfw7b.user_tokens' doesn't exist in /home/customer/www/mohamedk10.sg-host.com/public_html/config/auth.php:85
+Stack trace:
+#0 /home/customer/www/mohamedk10.sg-host.com/public_html/config/auth.php(85): PDO->prepare('SELECT user_id ...')
+#1 /home/customer/www/mohamedk10.sg-host.com/public_html/admin/_auth_bootstrap.php(35): verify_refresh_token('b32f94df779bda9...')
+#2 /home/customer/www/mohamedk10.sg-host.com/public_html/admin/dashboard.php(4): admin_require_auth()
+#3 {main}
+  thrown in /home/customer/www/mohamedk10.sg-host.com/public_html/config/auth.php on line 85
+[13-Aug-2025 20:40:38 Asia/Kuwait] PHP Fatal error:  Uncaught PDOException: SQLSTATE[42S02]: Base table or view not found: 1146 Table 'db7erxssxpfw7b.user_tokens' doesn't exist in /home/customer/www/mohamedk10.sg-host.com/public_html/config/auth.php:85
+Stack trace:
+#0 /home/customer/www/mohamedk10.sg-host.com/public_html/config/auth.php(85): PDO->prepare('SELECT user_id ...')
+#1 /home/customer/www/mohamedk10.sg-host.com/public_html/admin/_auth_bootstrap.php(35): verify_refresh_token('b32f94df779bda9...')
+#2 /home/customer/www/mohamedk10.sg-host.com/public_html/admin/dashboard.php(4): admin_require_auth()
+#3 {main}
+  thrown in /home/customer/www/mohamedk10.sg-host.com/public_html/config/auth.php on line 85
+[13-Aug-2025 20:41:12 Asia/Kuwait] PHP Fatal error:  Uncaught PDOException: SQLSTATE[42S02]: Base table or view not found: 1146 Table 'db7erxssxpfw7b.user_tokens' doesn't exist in /home/customer/www/mohamedk10.sg-host.com/public_html/config/auth.php:85
+Stack trace:
+#0 /home/customer/www/mohamedk10.sg-host.com/public_html/config/auth.php(85): PDO->prepare('SELECT user_id ...')
+#1 /home/customer/www/mohamedk10.sg-host.com/public_html/admin/_auth_bootstrap.php(35): verify_refresh_token('b32f94df779bda9...')
+#2 /home/customer/www/mohamedk10.sg-host.com/public_html/admin/dashboard.php(4): admin_require_auth()
+#3 {main}
+  thrown in /home/customer/www/mohamedk10.sg-host.com/public_html/config/auth.php on line 85
+[13-Aug-2025 20:41:24 Asia/Kuwait] PHP Fatal error:  Uncaught PDOException: SQLSTATE[42S02]: Base table or view not found: 1146 Table 'db7erxssxpfw7b.user_tokens' doesn't exist in /home/customer/www/mohamedk10.sg-host.com/public_html/config/auth.php:85
+Stack trace:
+#0 /home/customer/www/mohamedk10.sg-host.com/public_html/config/auth.php(85): PDO->prepare('SELECT user_id ...')
+#1 /home/customer/www/mohamedk10.sg-host.com/public_html/admin/logout.php(13): verify_refresh_token('b32f94df779bda9...')
+#2 {main}
+  thrown in /home/customer/www/mohamedk10.sg-host.com/public_html/config/auth.php on line 85
+[13-Aug-2025 20:43:44 Asia/Kuwait] PHP Fatal error:  Uncaught PDOException: SQLSTATE[42S02]: Base table or view not found: 1146 Table 'db7erxssxpfw7b.user_tokens' doesn't exist in /home/customer/www/mohamedk10.sg-host.com/public_html/config/auth.php:85
+Stack trace:
+#0 /home/customer/www/mohamedk10.sg-host.com/public_html/config/auth.php(85): PDO->prepare('SELECT user_id ...')
+#1 /home/customer/www/mohamedk10.sg-host.com/public_html/admin/_auth_bootstrap.php(35): verify_refresh_token('b32f94df779bda9...')
+#2 /home/customer/www/mohamedk10.sg-host.com/public_html/admin/setup.php(4): admin_require_auth()
+#3 {main}
+  thrown in /home/customer/www/mohamedk10.sg-host.com/public_html/config/auth.php on line 85
+[13-Aug-2025 20:43:47 Asia/Kuwait] PHP Fatal error:  Uncaught PDOException: SQLSTATE[42S02]: Base table or view not found: 1146 Table 'db7erxssxpfw7b.user_tokens' doesn't exist in /home/customer/www/mohamedk10.sg-host.com/public_html/config/auth.php:85
+Stack trace:
+#0 /home/customer/www/mohamedk10.sg-host.com/public_html/config/auth.php(85): PDO->prepare('SELECT user_id ...')
+#1 /home/customer/www/mohamedk10.sg-host.com/public_html/admin/_auth_bootstrap.php(35): verify_refresh_token('b32f94df779bda9...')
+#2 /home/customer/www/mohamedk10.sg-host.com/public_html/admin/setup.php(4): admin_require_auth()
+#3 {main}
+  thrown in /home/customer/www/mohamedk10.sg-host.com/public_html/config/auth.php on line 85
+[13-Aug-2025 20:43:49 Asia/Kuwait] PHP Fatal error:  Uncaught PDOException: SQLSTATE[42S02]: Base table or view not found: 1146 Table 'db7erxssxpfw7b.user_tokens' doesn't exist in /home/customer/www/mohamedk10.sg-host.com/public_html/config/auth.php:85
+Stack trace:
+#0 /home/customer/www/mohamedk10.sg-host.com/public_html/config/auth.php(85): PDO->prepare('SELECT user_id ...')
+#1 /home/customer/www/mohamedk10.sg-host.com/public_html/admin/_auth_bootstrap.php(35): verify_refresh_token('b32f94df779bda9...')
+#2 /home/customer/www/mohamedk10.sg-host.com/public_html/admin/setup.php(4): admin_require_auth()
+#3 {main}
+  thrown in /home/customer/www/mohamedk10.sg-host.com/public_html/config/auth.php on line 85
+[13-Aug-2025 20:44:13 Asia/Kuwait] PHP Fatal error:  Uncaught PDOException: SQLSTATE[42S02]: Base table or view not found: 1146 Table 'db7erxssxpfw7b.user_tokens' doesn't exist in /home/customer/www/mohamedk10.sg-host.com/public_html/config/auth.php:85
+Stack trace:
+#0 /home/customer/www/mohamedk10.sg-host.com/public_html/config/auth.php(85): PDO->prepare('SELECT user_id ...')
+#1 /home/customer/www/mohamedk10.sg-host.com/public_html/admin/_auth_bootstrap.php(35): verify_refresh_token('b32f94df779bda9...')
+#2 /home/customer/www/mohamedk10.sg-host.com/public_html/admin/setup.php(4): admin_require_auth()
+#3 {main}
+  thrown in /home/customer/www/mohamedk10.sg-host.com/public_html/config/auth.php on line 85
+[13-Aug-2025 21:08:20 Asia/Kuwait] PHP Fatal error:  Uncaught PDOException: SQLSTATE[42S02]: Base table or view not found: 1146 Table 'db7erxssxpfw7b.user_tokens' doesn't exist in /home/customer/www/mohamedk10.sg-host.com/public_html/config/auth.php:85
+Stack trace:
+#0 /home/customer/www/mohamedk10.sg-host.com/public_html/config/auth.php(85): PDO->prepare('SELECT user_id ...')
+#1 /home/customer/www/mohamedk10.sg-host.com/public_html/admin/_auth_bootstrap.php(35): verify_refresh_token('b32f94df779bda9...')
+#2 /home/customer/www/mohamedk10.sg-host.com/public_html/admin/dashboard.php(20): admin_require_auth()
+#3 {main}
+  thrown in /home/customer/www/mohamedk10.sg-host.com/public_html/config/auth.php on line 85
+[13-Aug-2025 21:18:48 Asia/Kuwait] PHP Fatal error:  Uncaught Error: Call to undefined function admin_require_auth() in /home/customer/www/mohamedk10.sg-host.com/public_html/admin/setup.php:4
+Stack trace:
+#0 {main}
+  thrown in /home/customer/www/mohamedk10.sg-host.com/public_html/admin/setup.php on line 4
+[13-Aug-2025 21:18:55 Asia/Kuwait] PHP Fatal error:  Uncaught Error: Call to undefined function admin_require_auth() in /home/customer/www/mohamedk10.sg-host.com/public_html/views/admin/_header.php:16
+Stack trace:
+#0 /home/customer/www/mohamedk10.sg-host.com/public_html/admin/dashboard.php(18): include()
+#1 {main}
+  thrown in /home/customer/www/mohamedk10.sg-host.com/public_html/views/admin/_header.php on line 16
+[13-Aug-2025 21:27:08 Asia/Kuwait] PHP Fatal error:  Uncaught PDOException: SQLSTATE[42S22]: Column not found: 1054 Unknown column 'token' in 'where clause' in /home/customer/www/mohamedk10.sg-host.com/public_html/config/auth.php:85
+Stack trace:
+#0 /home/customer/www/mohamedk10.sg-host.com/public_html/config/auth.php(85): PDO->prepare('SELECT user_id ...')
+#1 /home/customer/www/mohamedk10.sg-host.com/public_html/admin/logout.php(13): verify_refresh_token('b32f94df779bda9...')
+#2 {main}
+  thrown in /home/customer/www/mohamedk10.sg-host.com/public_html/config/auth.php on line 85
+[13-Aug-2025 21:27:52 Asia/Kuwait] PHP Fatal error:  Uncaught PDOException: SQLSTATE[42S22]: Column not found: 1054 Unknown column 'token' in 'where clause' in /home/customer/www/mohamedk10.sg-host.com/public_html/config/auth.php:85
+Stack trace:
+#0 /home/customer/www/mohamedk10.sg-host.com/public_html/config/auth.php(85): PDO->prepare('SELECT user_id ...')
+#1 /home/customer/www/mohamedk10.sg-host.com/public_html/admin/logout.php(13): verify_refresh_token('b32f94df779bda9...')
+#2 {main}
+  thrown in /home/customer/www/mohamedk10.sg-host.com/public_html/config/auth.php on line 85
+[13-Aug-2025 22:44:59 Asia/Kuwait] PHP Fatal error:  Uncaught Error: Call to undefined function admin_require_auth() in /home/customer/www/mohamedk10.sg-host.com/public_html/admin/setup.php:4
+Stack trace:
+#0 {main}
+  thrown in /home/customer/www/mohamedk10.sg-host.com/public_html/admin/setup.php on line 4
+[13-Aug-2025 22:49:43 Asia/Kuwait] PHP Fatal error:  Uncaught Error: Call to undefined function admin_require_auth() in /home/customer/www/mohamedk10.sg-host.com/public_html/admin/setup.php:4
+Stack trace:
+#0 {main}
+  thrown in /home/customer/www/mohamedk10.sg-host.com/public_html/admin/setup.php on line 4
+[13-Aug-2025 23:07:42 Asia/Kuwait] PHP Fatal error:  Uncaught Error: Call to undefined function admin_require_auth() in /home/customer/www/mohamedk10.sg-host.com/public_html/admin/setup.php:4
+Stack trace:
+#0 {main}
+  thrown in /home/customer/www/mohamedk10.sg-host.com/public_html/admin/setup.php on line 4
+[13-Aug-2025 23:23:05 Asia/Kuwait] PHP Fatal error:  Uncaught Error: Call to undefined function admin_require_auth() in /home/customer/www/mohamedk10.sg-host.com/public_html/admin/setup.php:4
+Stack trace:
+#0 {main}
+  thrown in /home/customer/www/mohamedk10.sg-host.com/public_html/admin/setup.php on line 4
+[14-Aug-2025 00:17:31 Asia/Kuwait] PHP Fatal error:  Uncaught Error: Call to undefined function admin_require_auth() in /home/customer/www/mohamedk10.sg-host.com/public_html/admin/setup.php:4
+Stack trace:
+#0 {main}
+  thrown in /home/customer/www/mohamedk10.sg-host.com/public_html/admin/setup.php on line 4
+[14-Aug-2025 12:02:53 Asia/Kuwait] PHP Fatal error:  Uncaught Error: Call to undefined function admin_require_auth() in /home/customer/www/mohamedk10.sg-host.com/public_html/admin/setup.php:4
+Stack trace:
+#0 {main}
+  thrown in /home/customer/www/mohamedk10.sg-host.com/public_html/admin/setup.php on line 4
+[14-Aug-2025 12:27:57 Asia/Kuwait] PHP Fatal error:  Uncaught Error: Call to undefined function admin_require_auth() in /home/customer/www/mohamedk10.sg-host.com/public_html/admin/setup.php:4
+Stack trace:
+#0 {main}
+  thrown in /home/customer/www/mohamedk10.sg-host.com/public_html/admin/setup.php on line 4
+[14-Aug-2025 13:34:10 Asia/Kuwait] PHP Fatal error:  Uncaught Error: Call to undefined function admin_require_auth() in /home/customer/www/mohamedk10.sg-host.com/public_html/admin/setup.php:4
+Stack trace:
+#0 {main}
+  thrown in /home/customer/www/mohamedk10.sg-host.com/public_html/admin/setup.php on line 4

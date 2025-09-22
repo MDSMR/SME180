@@ -1,0 +1,4 @@
+[22-Sep-2025 11:22:22 UTC] PIN login error: SQLSTATE[42S22]: Column not found: 1054 Unknown column 'b.currency_symbol' in 'field list'
+[22-Sep-2025 11:34:34 UTC] PIN login error: SQLSTATE[42S22]: Column not found: 1054 Unknown column 'b.currency_symbol' in 'field list'
+[22-Sep-2025 11:46:53 UTC] PIN login error: SQLSTATE[42S22]: Column not found: 1054 Unknown column 'b.currency_symbol' in 'field list'
+[22-Sep-2025 11:51:06 UTC] PIN login error: SQLSTATE[42S22]: Column not found: 1054 Unknown column 'b.currency_symbol' in 'field list'

@@ -1,0 +1,1 @@
+<?php // response helper placeholder ?>

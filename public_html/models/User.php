@@ -1,0 +1,1 @@
+<?php // legacy model placeholder; using db.php + controllers ?>

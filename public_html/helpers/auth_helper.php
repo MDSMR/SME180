@@ -1,0 +1,1 @@
+<?php // auth helper placeholder ?>

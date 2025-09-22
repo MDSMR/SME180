@@ -1,0 +1,13 @@
+/* pos/styles.css - touch friendly POS */
+body { font-family: Arial, sans-serif; margin:0; padding:0; background:#f6f6f6; }
+.topbar { display:flex; justify-content:space-between; align-items:center; padding:10px 16px; background:#111; color:#fff; }
+.main { display:flex; height: calc(100vh - 60px); }
+.products { width: 60%; padding:12px; overflow:auto; background:#fff; }
+.basket { width: 40%; padding:12px; background:#fafafa; display:flex; flex-direction:column; }
+#categories { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px; }
+.cat { padding:8px 12px; background:#eee; border-radius:6px; cursor:pointer; }
+.item { display:inline-block; width:120px; margin:8px; padding:8px; border:1px solid #ddd; border-radius:8px; text-align:center; cursor:pointer; user-select:none; }
+#cart { flex:1; overflow:auto; padding:8px; }
+.cart-row { display:flex; justify-content:space-between; padding:8px; border-bottom:1px solid #eee; align-items:center; }
+.actions { display:flex; gap:8px; padding:10px 0; }
+button { padding:12px 16px; font-size:16px; border-radius:8px; cursor:pointer; }

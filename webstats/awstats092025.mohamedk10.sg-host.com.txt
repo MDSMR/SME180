@@ -9,32 +9,32 @@ AWSTATS DATA FILE 7.7 (build 20161204)
 BEGIN_MAP 28
 POS_GENERAL 2005                
 POS_TIME 2686                
-POS_VISITOR 12007               
-POS_DAY 12305               
-POS_DOMAIN 3484                
-POS_LOGIN 3717                
-POS_ROBOT 3872                
-POS_WORMS 4050                
-POS_EMAILSENDER 4181                
-POS_EMAILRECEIVER 4324                
-POS_SESSION 12735               
-POS_SIDER 12941               
-POS_FILETYPES 4459                
-POS_DOWNLOADS 4618                
-POS_OS 4666                
-POS_BROWSER 4747                
-POS_SCREENSIZE 4849                
-POS_UNKNOWNREFERER 4923                
-POS_UNKNOWNREFERERBROWSER 5010                
-POS_ORIGIN 5092                
-POS_SEREFERRALS 5232                
-POS_PAGEREFS 5376                
-POS_SEARCHWORDS 5524                
-POS_KEYWORDS 5676                
+POS_VISITOR 13332               
+POS_DAY 13669               
+POS_DOMAIN 3518                
+POS_LOGIN 3751                
+POS_ROBOT 3906                
+POS_WORMS 4123                
+POS_EMAILSENDER 4254                
+POS_EMAILRECEIVER 4397                
+POS_SESSION 14246               
+POS_SIDER 14453               
+POS_FILETYPES 4532                
+POS_DOWNLOADS 4692                
+POS_OS 4740                
+POS_BROWSER 4821                
+POS_SCREENSIZE 4923                
+POS_UNKNOWNREFERER 4997                
+POS_UNKNOWNREFERERBROWSER 5084                
+POS_ORIGIN 5166                
+POS_SEREFERRALS 5306                
+POS_PAGEREFS 5450                
+POS_SEARCHWORDS 5598                
+POS_KEYWORDS 5750                
 POS_MISC 2350                
-POS_ERRORS 5735                
-POS_CLUSTER 3573                
-POS_SIDER_404 5878                
+POS_ERRORS 5809                
+POS_CLUSTER 3607                
+POS_SIDER_404 6010                
 END_MAP
 
 # LastLine    = Date of last record processed - Last record line number in last log - Last record offset in last log - Last record signature value
@@ -46,62 +46,62 @@ END_MAP
 # MonthHostsKnown   = Number of hosts known
 # MonthHostsUnKnown = Number of hosts unknown
 BEGIN_GENERAL 8
-LastLine 20250914212518 14263 4997045 0
+LastLine 20250921223135 16120 5578733 0
 FirstTime 20250901000017
-LastTime 20250914212518
-LastUpdate 20250915044433 14263 13325 274 0 664
-TotalVisits 56                  
-TotalUnique 4                   
+LastTime 20250921223135
+LastUpdate 20250922044018 16120 14480 894 0 746
+TotalVisits 80                  
+TotalUnique 5                   
 MonthHostsKnown 0                   
-MonthHostsUnknown 4                   
+MonthHostsUnknown 5                   
 END_GENERAL
 
 # Misc ID - Pages - Hits - Bandwidth
 BEGIN_MISC 10
-DirectorSupport 0 0 0
-FlashSupport 0 0 0
-RealPlayerSupport 0 0 0
-JavaEnabled 0 0 0
-AddToFavourites 0 0 0
+JavascriptDisabled 0 0 0
 QuickTimeSupport 0 0 0
+JavaEnabled 0 0 0
+PDFSupport 0 0 0
+RealPlayerSupport 0 0 0
+DirectorSupport 0 0 0
+AddToFavourites 0 0 0
 TotalMisc 0 0 0
 WindowsMediaPlayerSupport 0 0 0
-PDFSupport 0 0 0
-JavascriptDisabled 0 0 0
+FlashSupport 0 0 0
 END_MISC
 
 # Hour - Pages - Hits - Bandwidth - Not viewed Pages - Not viewed Hits - Not viewed Bandwidth
 BEGIN_TIME 24
 0 26 26 203393 1 2 35
-1 0 0 0 0 0 0
+1 0 0 0 0 2 70
 2 26 26 88811 17 20 70
 3 55 55 136515 23 24 14147
 4 0 0 0 0 0 0
-5 0 0 0 0 1 35
-6 99 100 553792 53 55 83966
-7 195 200 1104819 30 40 95904
-8 343 377 1971168 158 168 325129
-9 215 233 1298934 36 44 169344
-10 266 307 1855636 43 65 592439
-11 331 346 1604442 631 646 350870
-12 574 662 3182792 95 101 339096
-13 417 456 2469340 749 750 127043
-14 119 122 832876 69 72 56448
-15 270 279 3691166 43 53 184800
-16 436 487 2327271 35 36 14147
-17 183 196 2553410 33 41 197603
-18 17 17 129437 7 10 28259
-19 10 10 82013 3 3 14112
-20 211 227 849244 508 508 0
-21 550 605 3077726 73 80 225862
-22 397 440 2188278 83 85 534296
+5 84 84 61610 29 30 45696
+6 299 300 634830 125 130 272275
+7 546 551 1172742 249 259 946220
+8 359 393 1974304 159 169 325242
+9 216 234 1303643 37 45 169344
+10 298 339 1861907 45 67 592659
+11 349 364 1619580 661 679 462884
+12 697 785 3212710 161 167 594815
+13 555 594 2541908 877 878 251739
+14 184 187 872351 82 85 72191
+15 307 316 3729431 105 115 191531
+16 645 696 2383723 65 67 45894
+17 262 275 2595678 43 51 198619
+18 37 37 154162 19 22 29994
+19 65 65 183229 42 43 213008
+20 228 244 852987 531 531 2962
+21 585 640 3096051 117 125 536414
+22 464 507 2254747 113 115 746102
 23 173 174 968452 60 74 1534512
 END_TIME
 
 # Domain - Pages - Hits - Bandwidth
 # The 10 first Pages must be first (order not required for others)
 BEGIN_DOMAIN 1
-eg 4913 5345 31169515
+eg 6460 6892 31902764
 END_DOMAIN
 
 # Cluster ID - Pages - Hits - Bandwidth
@@ -115,8 +115,9 @@ END_LOGIN
 
 # Robot ID - Hits - Bandwidth - Last visit - Hits on robots.txt
 # The 10 first Hits must be first (order not required for others)
-BEGIN_ROBOT 1
-bot[\s_+:,\.\;\/\\-] 18 630 20250914162354 18
+BEGIN_ROBOT 2
+no_user_agent 75 6507 20250915155723 0
+bot[\s_+:,\.\;\/\\-] 26 910 20250921211625 26
 END_ROBOT
 
 # Worm ID - Hits - Bandwidth - Last visit
@@ -136,11 +137,11 @@ END_EMAILRECEIVER
 
 # Files type - Hits - Bandwidth - Bandwidth without compression - Bandwidth after compression
 BEGIN_FILETYPES 5
-php 4899 26438590 0 0
-js 67 276121 0 0
-css 361 1077007 0 0
 png 4 3360623 0 0
-html 14 17174 0 0
+html 86 294481 0 0
+js 67 276121 0 0
+php 6374 26894532 0 0
+css 361 1077007 0 0
 END_FILETYPES
 
 # Downloads - Hits - Bandwidth
@@ -149,13 +150,13 @@ END_DOWNLOADS
 
 # OS ID - Hits
 BEGIN_OS ID - Hits - Pages 1
-win10 5345 4913
+win10 6892 6460
 END_OS
 
 # Browser ID - Hits - Pages
 BEGIN_BROWSER 2
 chrome139.0.0.0 4033 3613
-chrome140.0.0.0 1312 1300
+chrome140.0.0.0 2859 2847
 END_BROWSER
 
 # Screen size - Hits
@@ -172,11 +173,11 @@ END_UNKNOWNREFERERBROWSER
 
 # Origin - Pages - Hits 
 BEGIN_ORIGIN 6
-From0 330 330
+From0 471 471
 From1 0 0
 From2 0 0
 From3 0 0
-From4 4583 5015
+From4 5989 6421
 From5 0 0
 END_ORIGIN
 
@@ -200,94 +201,120 @@ BEGIN_KEYWORDS 0
 END_KEYWORDS
 
 # Errors - Hits - Bandwidth
-BEGIN_ERRORS 5
-500 202 1452980
+BEGIN_ERRORS 10
+405 7 222
+500 442 1466526
+503 2 229
 301 1 251
-403 32 301392
-404 222 3132864
-302 2397 0
+409 8 1547
+302 2513 0
+401 41 5165
+403 63 318130
+404 412 5435559
+400 101 11377
 END_ERRORS
 
 # URL with 404 errors - Hits - Last URL referrer
-BEGIN_SIDER_404 64
-/views/superadmin/billing/create_invoice.php 2 https://mohamedk10.sg-host.com/views/superadmin/billing/index.php
-/views/admin/audit_logs.php 2 https://mohamedk10.sg-host.com/views/superadmin/dashboard.php
-/views/superadmin/audit/index.php 1 https://mohamedk10.sg-host.com/views/superadmin/dashboard.php
-/views/admin/rewards/stamp/cards.php 1 https://mohamedk10.sg-host.com/views/admin/rewards/stamp/reports.php
-/tools/export_structure_flat.php 1 -
-/assets/js/rewards.js 4 https://mohamedk10.sg-host.com/views/admin/customers/rewards.php
-/views/admin/rewards/points/program_edit.php 1 https://mohamedk10.sg-host.com/views/admin/rewards/points/overview.php
-/controllers/admin/orders/api/search_debug.php 1 -
-/views/admin/tables/index.php 1 https://mohamedk10.sg-host.com/views/admin/customers/rewards.php
-/views/admin/rewards/discounts/members.php 1 https://mohamedk10.sg-host.com/views/admin/rewards/discounts/index.php
-/views/admin/rewards/points/programs.php 1 https://mohamedk10.sg-host.com/views/admin/rewards/points/overview.php
-/views/admin/rewards/discounts/create.php 3 https://mohamedk10.sg-host.com/views/admin/rewards/discounts/index.php
-/views/superadmin/security/index.php 3 https://mohamedk10.sg-host.com/views/superadmin/system/index.php
-/views/admin/rewards/points/balances.php 3 https://mohamedk10.sg-host.com/views/admin/rewards/points/reports.php
-/views/admin/customers/create.php 4 https://mohamedk10.sg-host.com/views/admin/customers/profile.php
-/tools/export_html_structure.php 2 -
-/public_html/controllers/admin/rewards/discounts/export_usage.php 2 -
-/views/logout.php 3 -
-/views/admin/rewards/cashback/Index.php 5 https://mohamedk10.sg-host.com/views/admin/rewards/cashback/index.php
-/views/superadmin/plans/index.php 2 https://mohamedk10.sg-host.com/views/superadmin/tenants/index.php
-/views/superadmin/tenants/subscriptions.php 1 https://mohamedk10.sg-host.com/views/superadmin/tenants/index.php
-/views/superadmin/settings.php 2 https://mohamedk10.sg-host.com/views/superadmin/dashboard.php
-/views/superadmin/system/maintenance.php 1 https://mohamedk10.sg-host.com/views/superadmin/system/index.php
-/views/admin/tools/export_html_structure.php 1 -
-/views/superadmin/security/devices.php 1 https://mohamedk10.sg-host.com/views/superadmin/system/index.php
-/views/admin/rewards/discounts/edit_rule.php 1 https://mohamedk10.sg-host.com/views/admin/rewards/discounts/index.php
-/views/superadmin/system/config.php 1 https://mohamedk10.sg-host.com/views/superadmin/system/index.php
-/assets/js/bootstrap.bundle.min.js 4 https://mohamedk10.sg-host.com/views/admin/rewards/points/catalog.php
-/views/admin/stockflow/view_transfer.php 1 https://mohamedk10.sg-host.com/views/admin/stockflow/index.php
-/views/admin/Categories/index 1 -
-/project_structure_2025-09-10_21-51-45.html 1 -
-/assets/css/bootstrap.min.css 4 https://mohamedk10.sg-host.com/views/admin/rewards/points/catalog.php
-/views/superadmin/audit_logs.php 6 https://mohamedk10.sg-host.com/views/superadmin/system/index.php
-/controllers/admin/orders/api/customers.php 1 https://mohamedk10.sg-host.com/views/admin/orders/create.php
-/views/superadmin/audit-logs.php 1 https://mohamedk10.sg-host.com/views/superadmin/dashboard.php
-/views/admin/rewards/points/program_new.php 4 https://mohamedk10.sg-host.com/views/admin/rewards/points/overview.php
-/views/superadmin/security/policies.php 1 https://mohamedk10.sg-host.com/views/superadmin/system/index.php
-/assets/css/ms-fluent.css 62 https://mohamedk10.sg-host.com/views/admin/customers/rewards.php
-/views/superadmin/system/index.php 5 https://mohamedk10.sg-host.com/views/superadmin/plans/index.php
-/views/superadmin/system/backup.php 1 https://mohamedk10.sg-host.com/views/superadmin/system/index.php
-/forgot-password 1 https://mohamedk10.sg-host.com/views/auth/login.php
-/views/superadmin/superadmin/subscription-plans.php 1 -
-/views/admin/rewards/points/transactions.php 5 https://mohamedk10.sg-host.com/views/admin/rewards/points/reports.php
-/views/auth/logout_debug.php 1 -
-/views/admin/logout.php 1 -
-/views/admin/rewards/points/_shared/loyalty.js 16 https://mohamedk10.sg-host.com/views/admin/rewards/points/create.php
+BEGIN_SIDER_404 84
 /controllers/auth/logout.php 6 https://mohamedk10.sg-host.com/views/admin/dashboard.php
-/views/admin/customer/index.php 1 -
-/assets/css/rewards.css 6 https://mohamedk10.sg-host.com/views/admin/customers/rewards.php
-/controllers/admin/rewards/discounts/export_usage.php 5 https://mohamedk10.sg-host.com/views/admin/rewards/discounts/reports.php
-/views/admin/rewards/points/overview.php 1 https://mohamedk10.sg-host.com/views/admin/dashboard.php
-/views/admin/rewards/stamp/index.php&debug_edit=1 1 -
-/views/admin/customers/rewards.php 6 https://mohamedk10.sg-host.com/views/admin/customers/profile.php
-/controllers/admin/orders/api/tables.php 6 https://mohamedk10.sg-host.com/views/admin/orders/create.php
-/assets/images/sme180.png 7 https://mohamedk10.sg-host.com/views/auth/login.php
-/views/superadmin/subscription-plans.php 4 https://mohamedk10.sg-host.com/views/superadmin/dashboard.php
-/views/admin/rewards/stamp/index.phpdebug_edit=1 1 -
-/views/admin/rewards/points/customers.php 2 https://mohamedk10.sg-host.com/views/admin/rewards/points/overview.php
-/assets/img/logo.svg 1 https://mohamedk10.sg-host.com/views/superadmin/dashboard.php
-/controllers/admin/tables/setup.php 3 https://mohamedk10.sg-host.com/views/admin/tables/index.php
-/views/admin/rewards/stamp/overview.php 1 https://mohamedk10.sg-host.com/views/admin/rewards/points/reports.php
-/views/superadmin/plans/view.php 1 https://mohamedk10.sg-host.com/views/superadmin/plans/index.php
-/views/superadmin/settings/index.php 1 https://mohamedk10.sg-host.com/views/superadmin/dashboard.php
+/views/superadmin/tenants/subscriptions.php 1 https://mohamedk10.sg-host.com/views/superadmin/tenants/index.php
+/views/admin/rewards/points/programs.php 1 https://mohamedk10.sg-host.com/views/admin/rewards/points/overview.php
 /views/admin/rewards/discounts/edit_scheme.php 1 https://mohamedk10.sg-host.com/views/admin/rewards/discounts/index.php
+/forgot-password 1 https://mohamedk10.sg-host.com/views/auth/login.php
+/views/admin/tables/index.php 1 https://mohamedk10.sg-host.com/views/admin/customers/rewards.php
+/pos/api/order/set_service_charge.php 6 https://mohamedk10.sg-host.com/test_sme180_pos.html
+/assets/css/bootstrap.min.css 4 https://mohamedk10.sg-host.com/views/admin/rewards/points/catalog.php
+/views/admin/customers/rewards.php 6 https://mohamedk10.sg-host.com/views/admin/customers/profile.php
+/pos/api/order/status.php 3 https://mohamedk10.sg-host.com/test_sme180_pos.html
+/views/admin/logout.php 1 -
+/assets/css/rewards.css 6 https://mohamedk10.sg-host.com/views/admin/customers/rewards.php
+/pos/api/health_check.php 1 https://mohamedk10.sg-host.com/test_sme180_pos.html
+/views/superadmin/plans/view.php 1 https://mohamedk10.sg-host.com/views/superadmin/plans/index.php
+/views/admin/rewards/stamp/overview.php 1 https://mohamedk10.sg-host.com/views/admin/rewards/points/reports.php
+/views/superadmin/settings/index.php 1 https://mohamedk10.sg-host.com/views/superadmin/dashboard.php
+/tools/export_structure_flat.php 1 -
+/pos/api/order.status.php 1 -
+/views/admin/rewards/points/balances.php 3 https://mohamedk10.sg-host.com/views/admin/rewards/points/reports.php
+/views/admin/rewards/points/_shared/loyalty.js 16 https://mohamedk10.sg-host.com/views/admin/rewards/points/create.php
+/test_session.php 1 -
+/pos/api/order/void_item.php 1 https://mohamedk10.sg-host.com/test_sme180_pos.html
+/project_structure_2025-09-10_21-51-45.html 1 -
+/views/auth/logout_debug.php 1 -
+/pos/api/order/park.php 1 https://mohamedk10.sg-host.com/test_sme180_pos.html
+/views/admin/rewards/discounts/edit_rule.php 1 https://mohamedk10.sg-host.com/views/admin/rewards/discounts/index.php
+/views/admin/rewards/points/customers.php 2 https://mohamedk10.sg-host.com/views/admin/rewards/points/overview.php
+/controllers/admin/orders/api/tables.php 6 https://mohamedk10.sg-host.com/views/admin/orders/create.php
+/views/admin/rewards/cashback/Index.php 5 https://mohamedk10.sg-host.com/views/admin/rewards/cashback/index.php
+/views/admin/rewards/stamp/index.phpdebug_edit=1 1 -
+/views/superadmin/security/policies.php 1 https://mohamedk10.sg-host.com/views/superadmin/system/index.php
+/views/superadmin/billing/create_invoice.php 2 https://mohamedk10.sg-host.com/views/superadmin/billing/index.php
+/pos/api/shifts/close.php 10 https://mohamedk10.sg-host.com/test-shift-close.html
+/pos/api/void_debug.php 1 -
+/views/superadmin/security/index.php 3 https://mohamedk10.sg-host.com/views/superadmin/system/index.php
+/views/admin/rewards/discounts/members.php 1 https://mohamedk10.sg-host.com/views/admin/rewards/discounts/index.php
+/pos/api/order/resume.php 15 https://mohamedk10.sg-host.com/resume_test.html
+/views/superadmin/system/config.php 1 https://mohamedk10.sg-host.com/views/superadmin/system/index.php
+/1 1 -
+/views/admin/customer/index.php 1 -
+/controllers/admin/tables/setup.php 3 https://mohamedk10.sg-host.com/views/admin/tables/index.php
+/views/admin/tools/export_html_structure.php 1 -
+/views/admin/rewards/stamp/cards.php 1 https://mohamedk10.sg-host.com/views/admin/rewards/stamp/reports.php
+/views/admin/rewards/discounts/create.php 3 https://mohamedk10.sg-host.com/views/admin/rewards/discounts/index.php
+/assets/css/ms-fluent.css 62 https://mohamedk10.sg-host.com/views/admin/customers/rewards.php
+/pos/api/kds/screens/heartbeat.php 25 https://mohamedk10.sg-host.com/test_sme180_pos.html
+/assets/js/rewards.js 4 https://mohamedk10.sg-host.com/views/admin/customers/rewards.php
+/views/superadmin/superadmin/subscription-plans.php 1 -
+/pos/login.php 108 https://mohamedk10.sg-host.com/test_phase2.php
+/test_heartbeat_fix.php 2 -
+/pos/api/debug/void_debug.php 1 -
+/pos/api/order/fire.php 3 https://mohamedk10.sg-host.com/test_sme180_pos.html
+/pos/api/shifts/force-close-all.php 2 https://mohamedk10.sg-host.com/test-shift-close.html
+/views/admin/rewards/points/transactions.php 5 https://mohamedk10.sg-host.com/views/admin/rewards/points/reports.php
+/views/admin/audit_logs.php 2 https://mohamedk10.sg-host.com/views/superadmin/dashboard.php
+/views/admin/customers/create.php 4 https://mohamedk10.sg-host.com/views/admin/customers/profile.php
+/pos/api/shifts/reconcile.php 4 https://mohamedk10.sg-host.com/test_sme180_pos.html
+/views/admin/rewards/points/overview.php 1 https://mohamedk10.sg-host.com/views/admin/dashboard.php
+/views/superadmin/security/devices.php 1 https://mohamedk10.sg-host.com/views/superadmin/system/index.php
+/views/superadmin/subscription-plans.php 4 https://mohamedk10.sg-host.com/views/superadmin/dashboard.php
+/views/superadmin/audit_logs.php 6 https://mohamedk10.sg-host.com/views/superadmin/system/index.php
+/views/superadmin/system/backup.php 1 https://mohamedk10.sg-host.com/views/superadmin/system/index.php
+/views/admin/rewards/points/program_edit.php 1 https://mohamedk10.sg-host.com/views/admin/rewards/points/overview.php
+/views/admin/stockflow/view_transfer.php 1 https://mohamedk10.sg-host.com/views/admin/stockflow/index.php
+/pos/api/order/resume_simple.php 3 -
+/views/superadmin/audit-logs.php 1 https://mohamedk10.sg-host.com/views/superadmin/dashboard.php
+/views/superadmin/settings.php 2 https://mohamedk10.sg-host.com/views/superadmin/dashboard.php
+/assets/img/logo.svg 1 https://mohamedk10.sg-host.com/views/superadmin/dashboard.php
+/views/admin/rewards/stamp/index.php&debug_edit=1 1 -
+/views/logout.php 3 -
+/assets/js/bootstrap.bundle.min.js 4 https://mohamedk10.sg-host.com/views/admin/rewards/points/catalog.php
+/views/superadmin/system/maintenance.php 1 https://mohamedk10.sg-host.com/views/superadmin/system/index.php
+/controllers/admin/orders/api/customers.php 1 https://mohamedk10.sg-host.com/views/admin/orders/create.php
+/assets/images/sme180.png 7 https://mohamedk10.sg-host.com/views/auth/login.php
+/controllers/admin/rewards/discounts/export_usage.php 5 https://mohamedk10.sg-host.com/views/admin/rewards/discounts/reports.php
+/controllers/admin/orders/api/search_debug.php 1 -
+/views/superadmin/system/index.php 5 https://mohamedk10.sg-host.com/views/superadmin/plans/index.php
+/views/admin/Categories/index 1 -
+/public_html/controllers/admin/rewards/discounts/export_usage.php 2 -
+/views/superadmin/plans/index.php 2 https://mohamedk10.sg-host.com/views/superadmin/tenants/index.php
+/pos/api/test_tip.php 1 -
+/views/admin/rewards/points/program_new.php 4 https://mohamedk10.sg-host.com/views/admin/rewards/points/overview.php
+/tools/export_html_structure.php 2 -
+/views/superadmin/audit/index.php 1 https://mohamedk10.sg-host.com/views/superadmin/dashboard.php
 END_SIDER_404
 
 # Host - Pages - Hits - Bandwidth - Last visit date - [Start date of last visit] - [Last page of last visit]
 # [Start date of last visit] and [Last page of last visit] are saved only if session is not finished
 # The 10 first Hits must be first (order not required for others)
-BEGIN_VISITOR 4
+BEGIN_VISITOR 5
 41.233.155.113 4103 4530 27099860 20250912111417
-41.234.238.5 688 693 3120366 20250914212518 20250914210023 /views/superadmin/dashboard.php
+41.234.238.5 2204 2209 3772605 20250921223135 20250921214921 /pos/api/kds/heartbeat.php
 41.239.176.136 83 83 608410 20250901124311
 41.239.179.184 39 39 340879 20250902101421
+102.185.52.125 31 31 81010 20250918193755
 END_VISITOR
 
 # Date - Pages - Hits - Bandwidth - Visits
-BEGIN_DAY 14
+BEGIN_DAY 20
 20250901 116 116 892994 6
 20250902 71 71 569142 6
 20250903 281 283 2209582 3
@@ -302,139 +329,196 @@ BEGIN_DAY 14
 20250912 393 394 1665547 5
 20250913 207 212 849006 3
 20250914 183 183 1121257 4
+20250915 50 50 94207 6
+20250917 41 41 10596 2
+20250918 313 313 136597 4
+20250919 91 91 51608 3
+20250920 351 351 102805 5
+20250921 701 701 337436 4
 END_DAY
 
 # Session range - Number of visits
 BEGIN_SESSION 7
-15mn-30mn 3
-30mn-1h 7
-2mn-5mn 1
-1h+ 33
-5mn-15mn 4
-0s-30s 5
-30s-2mn 2
+1h+ 40
+2mn-5mn 2
+5mn-15mn 6
+0s-30s 9
+30mn-1h 11
+15mn-30mn 8
+30s-2mn 3
 END_SESSION
 
 # URL - Pages - Bandwidth - Entry - Exit
 # The 10 first Pages must be first (order not required for others)
-BEGIN_SIDER 119
+BEGIN_SIDER 170
 /views/admin/customers/rewards.php 705 1849084 0 2
 /views/admin/customers/index.php 675 3113253 2 1
-/views/auth/login.php 362 1208090 40 7
+/views/auth/login.php 366 1227098 42 8
 /views/admin/rewards/discounts/index.php 214 1227600 0 2
-/views/superadmin/dashboard.php 178 792023 2 1
+/views/superadmin/dashboard.php 179 799305 2 2
 /views/admin/rewards/points/index.php 177 1230736 1 0
 /views/admin/rewards/stamp/index.php 162 1191102 1 1
 /views/admin/customers/profile.php 145 651800 0 0
 /views/admin/rewards/stamp/reports.php 127 1146084 0 0
-/views/admin/dashboard.php 120 1096725 0 3
-/views/admin/rewards/discounts/earn_rules.php 1 543 0 0
-/views/superadmin/system/config.php 6 10714 0 0
-/views/superadmin/test_dashboard.php 1 459 0 0
-/views/admin/settings/users.php 11 143099 0 1
-/views/superadmin/audit_logs.php 1 2616 0 0
-/controllers/admin/settings/general_get.php 14 4920 0 0
-/views/auth/test_login.php 1 535 0 0
-/views/admin/rewards/discounts/test_create.php 6 1908 0 0
-/views/admin/rewards/points/redeem_rules.php 1 5908 0 0
-/views/superadmin/system/maintenance.php 1 0 0 0
-/views/admin/settings/printers.php 5 66740 0 0
-/views/admin/rewards/discounts/test_discounts.php 1 6708 0 0
-/controllers/admin/finance/aggregator_list.php 9 1197 0 0
-/debug_user_branches.php 1 973 0 1
-/api/get_user_branches.php 44 10923 0 0
-/views/superadmin/plans/index.php 78 354654 0 1
-/views/admin/rewards/points/test.php 2 48428 0 0
-/views/admin/audit_logs_simple.php 1 1460 0 0
-/tools/export_html_structure.php 45 171461 2 2
-/views/admin/rewards/points/ledger.php 1 6299 0 0
-/views/admin/rewards/points/catalog.php 1 6096 0 0
-/views/superadmin/security/index.php 7 14313 0 1
-/views/admin/rewards/discounts/adjustments.php 1 714 0 0
-/views/admin/rewards/cashback/wallets.php 30 220797 0 0
-/views/admin/catalog/categories.php 103 567607 0 0
-/controllers/admin/branches/list.php 14 3402 0 1
-/views/admin/orders/view.php 2 13803 0 0
-/views/superadmin/tenants/reset-password.php 1 0 0 1
-/controllers/admin/orders/api/totals.php 9 2203 0 1
-/controllers/admin/stockflow/manage_transfer.php 5 465 0 0
-/views/admin/rewards/stamp/overview.php 6 77472 0 0
-/export_html_structure.php 21 34395 1 1
-/views/admin/rewards/stamp/controllers/export_report.php 2 1588 0 0
-/views/admin/settings/general.php 20 314451 1 0
-/views/admin/customers/test_redirect.php 5 2904 0 0
-/views/superadmin/test.php 1 432 0 0
-/views/admin/customers/rewards_debug.php 2 3066 0 0
-/views/admin/rewards/discounts/create_program.php 10 91611 0 0
-/test_dashboard_error.php 1 593 0 0
-/views/admin/orders/edit.php 1 8355 0 0
-/views/admin/rewards/discounts/redeem_rules.php 1 529 0 0
-/views/admin/rewards/stamp/create.php 42 377263 0 1
-/views/admin/settings/tables/index.php 5 64572 0 0
-/views/superadmin/subscription-plans.php 6 10308 0 0
-/views/admin/rewards/discounts/index_standalone.php 1 999 0 0
-/views/auth/context_selection.php 51 173585 0 0
-/views/superadmin/users/create.php 2 13238 0 0
-/controllers/admin/orders/api/products.php 20 20988 0 1
-/controllers/admin/tables/index.php 16 3064 0 0
-/views/superadmin/check_session.php 1 1974 0 0
-/views/admin/orders/create.php 62 992574 0 3
-/controllers/admin/stockflow/get_branch_products.php 11 3218 0 0
-/views/superadmin/system/index.php 92 437399 1 1
-/views/superadmin/plans/edit.php 32 101458 0 0
-/controllers/admin/orders/api/search.php 49 7255 0 0
-/views/auth/logout_debug.php 3 642 0 0
-/views/admin/catalog/modifiers.php 58 348817 0 0
+/views/admin/dashboard.php 122 1116233 0 3
+/pos/api/order/update.php 36 14701 0 0
 /views/admin/rewards/cashback/index.php 96 676065 0 0
-/views/admin/tables/zones.php 1 6011 0 0
-/views/superadmin/tenants/index.php 101 466528 0 2
-/views/admin/stockflow/view_transfer.php 9 76283 1 0
-/test_branch_selection.php 1 1262 0 0
-/views/admin/orders/index.php 47 469905 2 2
-/views/superadmin/system/health.php 12 38513 0 0
-/views/admin/rewards/discounts/reports.php 36 239641 0 1
-/views/superadmin/users/edit.php 5 35727 0 0
-/views/admin/catalog/product_edit.php 3 33205 0 0
-/project_structure_2025-09-10_21-51-45.html 14 17174 0 0
-/views/auth/debug_login.php 1 358 0 0
-/views/admin/rewards/discounts/edit_rule.php 5 32269 0 0
-/views/admin/rewards/common/members.php 12 135465 0 1
-/views/admin/tables/index.php 27 299310 0 1
-/views/admin/customers/create.php 12 62303 0 2
-/views/superadmin/users/reset_credentials.php 3 18103 0 1
-/views/admin/rewards/discounts/create.php 4 6096 0 0
-/views/admin/rewards/points/create.php 60 562392 0 2
-/views/admin/rewards/points/reports.php 56 364580 0 2
-/views/admin/settings/finance.php 10 128204 0 0
-/views/admin/catalog/products.php 59 520020 0 0
-/views/admin/rewards/cashback/create.php 52 513362 0 0
-/views/admin/audit_logs.php 29 226282 0 1
-/controllers/admin/finance/payment_list.php 9 1395 0 0
-/controllers/admin/finance/tax_list.php 9 234 0 0
-/views/superadmin/tenants/create.php 26 80580 0 1
-/views/superadmin/plans/view.php 7 30527 0 0
-/views/admin/rewards/points/earn_rules.php 1 5907 0 0
-/controllers/admin/tables/setup.php 8 1841 0 0
-/views/admin/rewards/discounts/edit_scheme.php 26 141305 1 0
-/views/superadmin/users/index.php 36 184092 0 0
-/views/admin/rewards/cashback/overview.php 3 41172 0 1
-/controllers/admin/orders/api/tables.php 5 730 0 0
-/views/admin/stockflow/index.php 71 618236 0 2
-/views/admin/stockflow/transfer.php 61 692648 1 1
-/setup_directories.php 1 208 0 0
-/clear_session.php 1 526 0 0
+/tools/export_html_structure.php 45 171461 2 2
+/debug_user_branches.php 1 973 0 1
 /debug.php 1 426 0 0
-/views/admin/catalog/products_new.php 5 55063 0 0
-/views/admin/rewards/points/overview.php 76 779002 0 1
-/views/admin/rewards/stamp/verify_fix.php 1 1213 0 0
-/controllers/admin/rewards/discounts/export_usage.php 4 1220 0 0
-/api/printers.php 5 1110 0 0
-/views/superadmin/plans/create.php 5 28818 0 0
-/views/admin/rewards/cashback/reports.php 53 404298 0 1
+/test_phase1.php 23 40699 1 2
+/views/admin/rewards/common/members.php 12 135465 0 1
+/views/superadmin/system/index.php 92 437399 1 1
+/pos/api/shifts/current.php 90 21761 0 1
 /controllers/admin/finance/settings_get.php 9 1224 0 0
+/views/admin/customers/test_redirect.php 5 2904 0 0
+/controllers/admin/stockflow/get_branch_products.php 11 3218 0 0
+/views/superadmin/test_dashboard.php 1 459 0 0
+/views/superadmin/plans/edit.php 32 101458 0 0
+/pos/api/auth/logout.php 94 6768 0 2
+/controllers/admin/finance/aggregator_list.php 9 1197 0 0
+/views/admin/rewards/stamp/controllers/export_report.php 2 1588 0 0
+/pos/api/order/create.php 73 23715 0 1
+/pos/api/order/resume_simple.php 25 4521 0 1
+/views/admin/orders/index.php 47 469905 2 2
+/views/admin/catalog/products_new.php 5 55063 0 0
+/views/auth/debug_login.php 1 358 0 0
+/views/superadmin/test.php 1 432 0 0
+/views/superadmin/users/create.php 2 13238 0 0
+/views/admin/rewards/points/redeem_rules.php 1 5908 0 0
+/views/admin/stockflow/view_transfer.php 9 76283 1 0
+/views/admin/customers/create.php 12 62303 0 2
+/views/admin/settings/finance.php 10 128204 0 0
+/views/admin/catalog/modifiers.php 58 348817 0 0
+/views/admin/rewards/discounts/index_standalone.php 1 999 0 0
+/pos/api/shifts/reconcile.php 2 645 0 1
+/views/superadmin/subscription-plans.php 6 10308 0 0
+/views/superadmin/users/edit.php 5 35727 0 0
+/views/superadmin/users/reset_credentials.php 3 18103 0 1
+/pos/api/order/fire.php 38 9149 0 1
+/resume_test.html 11 5082 1 0
+//pos/api/auth/logout.php 1 16 0 0
+/views/superadmin/plans/create.php 5 28818 0 0
+/views/admin/rewards/points/reports.php 56 364580 0 2
+/pos/api/shifts/complete.php 57 16637 0 0
+/views/admin/rewards/discounts/test_create.php 6 1908 0 0
+/pos/api/kds/update_order_status.php 3 315 0 0
+/views/admin/rewards/discounts/create.php 4 6096 0 0
+/pos/api/order/pay.php 16 3894 0 2
+/views/admin/stockflow/index.php 71 618236 0 2
+/test_branch_selection.php 1 1262 0 0
+/diagnose_heartbeat.php 5 8151 0 0
+/views/admin/catalog/categories.php 103 567607 0 0
+/views/admin/settings/printers.php 5 66740 0 0
+/pos/api/order/void_order.php 2 297 0 2
+/controllers/admin/finance/payment_list.php 9 1395 0 0
+/views/admin/catalog/products.php 59 520020 0 0
+/pos/api/auth/validate_pin.php 95 11426 0 0
+/pos/api/shifts/close.php 12 3652 0 0
+/views/admin/rewards/stamp/verify_fix.php 1 1213 0 0
+/controllers/admin/orders/api/products.php 20 20988 0 1
+/pos/api/order/test_void_simple.php 1 135 0 0
+/controllers/admin/finance/tax_list.php 9 234 0 0
+/views/admin/rewards/cashback/create.php 52 513362 0 0
+/controllers/admin/settings/general_get.php 14 4920 0 0
+/controllers/admin/orders/api/tables.php 5 730 0 0
+/views/admin/rewards/cashback/wallets.php 30 220797 0 0
+/test_dashboard_error.php 1 593 0 0
+/pos/api/shifts/open.php 74 11966 0 0
+/pos/api/auth/pin_login.php 92 11684 0 0
+/pos/api/order/void_item.php 10 3651 0 0
+/views/auth/logout_debug.php 3 642 0 0
 /views/superadmin/tenants/manage-users.php 1 3289 0 0
-/views/superadmin/tenants/edit.php 18 95650 0 0
-/views/superadmin/system/backup.php 7 31209 0 0
-/views/superadmin/tenants/view.php 11 36632 0 0
 /views/superadmin/billing/index.php 9 19959 0 0
+/views/admin/customers/rewards_debug.php 2 3066 0 0
+/pos/api/order/status.php 48 16391 0 1
+/views/admin/rewards/stamp/create.php 42 377263 0 1
+/controllers/admin/tables/index.php 16 3064 0 0
+/views/admin/rewards/stamp/overview.php 6 77472 0 0
+/controllers/admin/orders/api/totals.php 9 2203 0 1
+/views/admin/rewards/points/earn_rules.php 1 5907 0 0
+/pos/api/test.php 1 368 1 0
+/pos/api/stations/register.php 92 8556 5 0
+/pos/api/order/add_tip.php 15 4636 0 0
+/views/superadmin/check_session.php 1 1974 0 0
+/views/admin/rewards/discounts/edit_scheme.php 26 141305 1 0
+/views/superadmin/plans/index.php 79 361837 0 1
+/pos/api/test_tip.php 5 2776 0 0
+/views/admin/settings/tables/index.php 5 64572 0 0
+/views/admin/tables/zones.php 1 6011 0 0
+/views/admin/rewards/discounts/adjustments.php 1 714 0 0
+/views/admin/rewards/discounts/earn_rules.php 1 543 0 0
+/controllers/admin/rewards/discounts/export_usage.php 4 1220 0 0
+/views/admin/rewards/cashback/overview.php 3 41172 0 1
+/pos/api/kds/feed.php 3 846 0 0
+/views/superadmin/system/maintenance.php 1 0 0 0
+/1.html 3 6614 1 0
+/views/admin/settings/general.php 20 314451 1 0
+/test-shift-close.html 5 14320 1 1
+/views/superadmin/tenants/reset-password.php 1 0 0 1
+/views/superadmin/tenants/create.php 26 80580 0 1
+/views/admin/rewards/cashback/reports.php 53 404298 0 1
+/views/superadmin/system/health.php 12 38513 0 0
+/pos/api/health.php 6 619 0 0
+/views/admin/rewards/points/catalog.php 1 6096 0 0
+/pos/api/session/open.php 96 4099 0 0
+/api/printers.php 5 1110 0 0
+/views/superadmin/tenants/index.php 102 473760 0 2
+/views/superadmin/system/backup.php 7 31209 0 0
+/controllers/admin/stockflow/manage_transfer.php 5 465 0 0
+/pos/api/shifts/diagnostic.php 2 2706 0 0
+/setup_directories.php 1 208 0 0
+/views/admin/audit_logs.php 29 226282 0 1
+/pos/api/order/apply_discount.php 29 7485 0 0
+/create_pos_files.php 1 541 0 0
+/export_html_structure.php 25 43013 3 2
+/views/auth/context_selection.php 53 184799 0 0
+/views/superadmin/audit_logs.php 1 2616 0 0
+/views/admin/rewards/points/overview.php 76 779002 0 1
+/debug_heartbeat_deep.php 2 3212 0 0
+/views/admin/stockflow/transfer.php 61 692648 1 1
+/test_sme180_pos.html 53 251291 7 0
+/test_heartbeat_fix.php 2 1618 0 0
+/views/admin/audit_logs_simple.php 1 1460 0 0
+/pos/api/kds/update_item_status.php 2 180 0 0
+/views/admin/settings/users.php 11 143099 0 1
+/views/auth/test_login.php 1 535 0 0
+/pos/api/order/void_order_debug.php 33 32585 0 0
+/controllers/admin/tables/setup.php 8 1841 0 0
+/views/admin/rewards/discounts/redeem_rules.php 1 529 0 0
+/views/admin/rewards/discounts/test_discounts.php 1 6708 0 0
+/pos/api/order/resume.php 15 3761 0 0
+/views/superadmin/system/config.php 6 10714 0 0
+/views/admin/rewards/points/test.php 2 48428 0 0
+/pos/api/stations/heartbeat.php 90 12837 0 0
+/views/admin/orders/view.php 2 13803 0 0
+/clear_session.php 1 526 0 0
+/views/admin/rewards/discounts/create_program.php 10 91611 0 0
+/views/superadmin/security/index.php 7 14313 0 1
+/pos/api/order/refund.php 1 69 0 0
+/controllers/admin/orders/api/search.php 49 7255 0 0
+/pos/api/order/park.php 34 9581 1 4
+/views/admin/rewards/points/ledger.php 1 6299 0 0
+/views/admin/catalog/product_edit.php 3 33205 0 0
+/controllers/admin/branches/list.php 14 3402 0 1
+/pos/api/kds/heartbeat.php 4 824 0 0
+/views/admin/rewards/discounts/edit_rule.php 5 32269 0 0
+/views/superadmin/users/index.php 37 192375 0 0
+/pos/api/session/close.php 84 2940 0 0
+/void_debug.php 1 375 0 0
+/views/superadmin/tenants/edit.php 18 95650 0 0
+/pos/api/session/active.php 95 7351 0 0
+/project_structure_2025-09-10_21-51-45.html 14 17174 0 0
+/views/admin/rewards/points/create.php 60 562392 0 2
+/views/admin/rewards/discounts/reports.php 36 239641 0 1
+/pos/api/order_status.php 1 45 0 0
+/pos/api/fix_issues.php 2 980 0 0
+/views/superadmin/plans/view.php 7 30527 0 0
+/views/admin/orders/create.php 62 992574 0 3
+/test_phase2.php 18 39507 2 2
+/views/superadmin/tenants/view.php 11 36632 0 0
+/api/get_user_branches.php 46 11421 0 0
+/views/admin/tables/index.php 27 299310 0 1
+/views/admin/orders/edit.php 1 8355 0 0
+/pos/api/order/set_service_charge.php 26 8445 0 0
 END_SIDER

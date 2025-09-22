@@ -1,0 +1,1 @@
+<?php // controller placeholder; routes handled via views/api ?>

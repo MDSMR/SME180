@@ -1,0 +1,31 @@
+body {
+  font-family: Arial, sans-serif;
+  margin: 20px;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 20px;
+}
+
+th, td {
+  padding: 10px;
+  border: 1px solid #ccc;
+  text-align: left;
+}
+
+.badge-active {
+  color: green;
+  font-weight: bold;
+}
+
+.badge-disabled {
+  color: red;
+  font-weight: bold;
+}
+
+button {
+  padding: 6px 12px;
+  margin-left: 5px;
+}

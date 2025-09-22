@@ -1,0 +1,22 @@
+[14-Aug-2025 00:01:18 Asia/Kuwait] PHP Fatal error:  Uncaught PDOException: SQLSTATE[42S22]: Column not found: 1054 Unknown column 'name' in 'order clause' in /home/customer/www/mohamedk10.sg-host.com/public_html/views/admin/menu/categories.php:38
+Stack trace:
+#0 /home/customer/www/mohamedk10.sg-host.com/public_html/views/admin/menu/categories.php(38): PDO->query('SELECT * FROM c...')
+#1 {main}
+  thrown in /home/customer/www/mohamedk10.sg-host.com/public_html/views/admin/menu/categories.php on line 38
+[14-Aug-2025 02:26:47 Asia/Kuwait] PHP Fatal error:  Uncaught PDOException: SQLSTATE[42S22]: Column not found: 1054 Unknown column 'name' in 'order clause' in /home/customer/www/mohamedk10.sg-host.com/public_html/views/admin/menu/categories.php:38
+Stack trace:
+#0 /home/customer/www/mohamedk10.sg-host.com/public_html/views/admin/menu/categories.php(38): PDO->query('SELECT * FROM c...')
+#1 {main}
+  thrown in /home/customer/www/mohamedk10.sg-host.com/public_html/views/admin/menu/categories.php on line 38
+[13-Aug-2025 23:31:31 UTC] PHP Parse error:  syntax error, unexpected variable "$e" in /home/customer/www/mohamedk10.sg-host.com/public_html/views/admin/menu/items.php on line 220
+[13-Aug-2025 23:31:34 UTC] PHP Parse error:  syntax error, unexpected variable "$e" in /home/customer/www/mohamedk10.sg-host.com/public_html/views/admin/menu/items.php on line 220
+[13-Aug-2025 23:31:39 UTC] PHP Parse error:  syntax error, unexpected variable "$e" in /home/customer/www/mohamedk10.sg-host.com/public_html/views/admin/menu/items.php on line 220
+[13-Aug-2025 23:32:11 UTC] PHP Parse error:  syntax error, unexpected variable "$e" in /home/customer/www/mohamedk10.sg-host.com/public_html/views/admin/menu/items.php on line 220
+[13-Aug-2025 23:32:13 UTC] PHP Parse error:  syntax error, unexpected variable "$e" in /home/customer/www/mohamedk10.sg-host.com/public_html/views/admin/menu/items.php on line 220
+[14-Aug-2025 12:27:56 Asia/Kuwait] PHP Fatal error:  Uncaught PDOException: SQLSTATE[42S22]: Column not found: 1054 Unknown column 'name' in 'order clause' in /home/customer/www/mohamedk10.sg-host.com/public_html/views/admin/menu/categories.php:38
+Stack trace:
+#0 /home/customer/www/mohamedk10.sg-host.com/public_html/views/admin/menu/categories.php(38): PDO->query('SELECT * FROM c...')
+#1 {main}
+  thrown in /home/customer/www/mohamedk10.sg-host.com/public_html/views/admin/menu/categories.php on line 38
+[14-Aug-2025 14:32:49 Asia/Kuwait] PHP Warning:  session_start(): Session cannot be started after headers have already been sent in /home/customer/www/mohamedk10.sg-host.com/public_html/views/admin/menu/items.php on line 32
+[14-Aug-2025 14:33:18 Asia/Kuwait] PHP Warning:  session_start(): Session cannot be started after headers have already been sent in /home/customer/www/mohamedk10.sg-host.com/public_html/views/admin/menu/items.php on line 32

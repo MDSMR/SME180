@@ -1,0 +1,20 @@
+[10-Aug-2025 21:32:41 UTC] PHP Parse error:  syntax error, unexpected token "<", expecting end of file in /home/customer/www/mohamedk10.sg-host.com/public_html/views/admin/managementdashboard/index.php on line 2
+[10-Aug-2025 21:32:56 UTC] PHP Parse error:  syntax error, unexpected token "<", expecting end of file in /home/customer/www/mohamedk10.sg-host.com/public_html/views/admin/managementdashboard/index.php on line 2
+[10-Aug-2025 21:35:13 UTC] PHP Warning:  require(/home/customer/www/mohamedk10.sg-host.com/public_html/views/admin/managementdashboard/includes/db.php): Failed to open stream: No such file or directory in /home/customer/www/mohamedk10.sg-host.com/public_html/views/admin/managementdashboard/index.php on line 8
+[10-Aug-2025 21:35:13 UTC] PHP Fatal error:  Uncaught Error: Failed opening required '/home/customer/www/mohamedk10.sg-host.com/public_html/views/admin/managementdashboard/includes/db.php' (include_path='.:/usr/local/php82/pear') in /home/customer/www/mohamedk10.sg-host.com/public_html/views/admin/managementdashboard/index.php:8
+Stack trace:
+#0 {main}
+  thrown in /home/customer/www/mohamedk10.sg-host.com/public_html/views/admin/managementdashboard/index.php on line 8
+[10-Aug-2025 21:35:43 UTC] PHP Warning:  require(/home/customer/www/mohamedk10.sg-host.com/public_html/views/admin/managementdashboard/includes/db.php): Failed to open stream: No such file or directory in /home/customer/www/mohamedk10.sg-host.com/public_html/views/admin/managementdashboard/index.php on line 8
+[10-Aug-2025 21:35:43 UTC] PHP Fatal error:  Uncaught Error: Failed opening required '/home/customer/www/mohamedk10.sg-host.com/public_html/views/admin/managementdashboard/includes/db.php' (include_path='.:/usr/local/php82/pear') in /home/customer/www/mohamedk10.sg-host.com/public_html/views/admin/managementdashboard/index.php:8
+Stack trace:
+#0 {main}
+  thrown in /home/customer/www/mohamedk10.sg-host.com/public_html/views/admin/managementdashboard/index.php on line 8
+[10-Aug-2025 21:44:32 UTC] PHP Warning:  require(/home/customer/www/mohamedk10.sg-host.com/public_html/views/admin/managementdashboard/../config/db.php): Failed to open stream: No such file or directory in /home/customer/www/mohamedk10.sg-host.com/public_html/views/admin/managementdashboard/index.php on line 8
+[10-Aug-2025 21:44:32 UTC] PHP Fatal error:  Uncaught Error: Failed opening required '/home/customer/www/mohamedk10.sg-host.com/public_html/views/admin/managementdashboard/../config/db.php' (include_path='.:/usr/local/php82/pear') in /home/customer/www/mohamedk10.sg-host.com/public_html/views/admin/managementdashboard/index.php:8
+Stack trace:
+#0 {main}
+  thrown in /home/customer/www/mohamedk10.sg-host.com/public_html/views/admin/managementdashboard/index.php on line 8
+[11-Aug-2025 12:11:05 UTC] PHP Warning:  Undefined array key "role" in /home/customer/www/mohamedk10.sg-host.com/public_html/views/admin/managementdashboard/includes/auth.php on line 11
+[11-Aug-2025 12:11:05 UTC] Unauthorized access attempt by user ID: 1
+[11-Aug-2025 12:11:05 UTC] PHP Warning:  Cannot modify header information - headers already sent by (output started at /home/customer/www/mohamedk10.sg-host.com/public_html/views/admin/managementdashboard/includes/auth.php:11) in /home/customer/www/mohamedk10.sg-host.com/public_html/views/admin/managementdashboard/includes/auth.php on line 15

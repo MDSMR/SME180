@@ -1,0 +1,8 @@
+[11-Aug-2025 12:46:59 UTC] PHP Fatal error:  Uncaught Error: Call to a member function query() on null in /home/customer/www/mohamedk10.sg-host.com/public_html/api/menu.php:7
+Stack trace:
+#0 {main}
+  thrown in /home/customer/www/mohamedk10.sg-host.com/public_html/api/menu.php on line 7
+[11-Aug-2025 13:14:01 UTC] PHP Fatal error:  Uncaught Error: Call to a member function query() on null in /home/customer/www/mohamedk10.sg-host.com/public_html/api/tables.php:9
+Stack trace:
+#0 {main}
+  thrown in /home/customer/www/mohamedk10.sg-host.com/public_html/api/tables.php on line 9

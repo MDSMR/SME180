@@ -1,0 +1,8 @@
+[13-Aug-2025 08:21:30 UTC] PHP Fatal error:  Uncaught Error: Failed opening required '/home/customer/www/mohamedk10.sg-host.com/public_html/config/config/env.php' (include_path='.:/usr/local/php82/pear') in /home/customer/www/mohamedk10.sg-host.com/public_html/config/check_env.php:3
+Stack trace:
+#0 {main}
+  thrown in /home/customer/www/mohamedk10.sg-host.com/public_html/config/check_env.php on line 3
+[13-Aug-2025 08:21:34 UTC] PHP Fatal error:  Uncaught Error: Failed opening required '/home/customer/www/mohamedk10.sg-host.com/public_html/config/config/env.php' (include_path='.:/usr/local/php82/pear') in /home/customer/www/mohamedk10.sg-host.com/public_html/config/check_env.php:3
+Stack trace:
+#0 {main}
+  thrown in /home/customer/www/mohamedk10.sg-host.com/public_html/config/check_env.php on line 3
