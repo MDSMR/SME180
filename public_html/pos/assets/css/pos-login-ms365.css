@@ -1,0 +1,181 @@
+/**
+ * SME 180 - Microsoft 365 Style Branch Cards
+ * File: /public_html/pos/assets/css/pos-login-ms365.css
+ * Version: 1.0.0
+ */
+
+/* Branch Selection Grid - MS365 Style */
+.branch-selector {
+    margin-bottom: 20px;
+}
+
+.branch-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+    gap: 16px;
+    margin-top: 12px;
+    max-height: 320px;
+    overflow-y: auto;
+    padding: 4px;
+}
+
+.branch-grid::-webkit-scrollbar {
+    width: 6px;
+}
+
+.branch-grid::-webkit-scrollbar-track {
+    background: #f1f5f9;
+    border-radius: 3px;
+}
+
+.branch-grid::-webkit-scrollbar-thumb {
+    background: #cbd5e1;
+    border-radius: 3px;
+}
+
+/* MS365 Branch Card */
+.branch-card {
+    background: white;
+    border-radius: 8px;
+    box-shadow: 0 1.6px 3.6px 0 rgba(0,0,0,0.132), 
+                0 0.3px 0.9px 0 rgba(0,0,0,0.108);
+    cursor: pointer;
+    transition: all 0.25s cubic-bezier(0.4, 0, 0.6, 1);
+    overflow: hidden;
+    position: relative;
+    border: 2px solid transparent;
+}
+
+.branch-card:hover {
+    box-shadow: 0 3.2px 7.2px 0 rgba(0,0,0,0.132), 
+                0 0.6px 1.8px 0 rgba(0,0,0,0.108);
+    transform: translateY(-2px);
+}
+
+.branch-card.selected {
+    border-color: #0078d4;
+    background: linear-gradient(to bottom, #ffffff, #f0f9ff);
+}
+
+.branch-card.selected::after {
+    content: '✓';
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    width: 20px;
+    height: 20px;
+    background: #0078d4;
+    color: white;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    font-weight: bold;
+}
+
+/* Card Header Bar */
+.branch-card-header {
+    height: 4px;
+    background: linear-gradient(90deg, #0078d4 0%, #40587c 100%);
+    transform: scaleX(0);
+    transition: transform 0.3s ease;
+}
+
+.branch-card:hover .branch-card-header,
+.branch-card.selected .branch-card-header {
+    transform: scaleX(1);
+}
+
+/* Card Body */
+.branch-card-body {
+    padding: 16px;
+}
+
+.branch-name {
+    font-size: 15px;
+    font-weight: 600;
+    color: #323130;
+    margin-bottom: 6px;
+    line-height: 1.3;
+}
+
+.branch-details {
+    font-size: 12px;
+    color: #605e5c;
+    margin-bottom: 3px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.branch-type-badge {
+    display: inline-block;
+    padding: 3px 8px;
+    background: #e1dfdd;
+    color: #323130;
+    border-radius: 4px;
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    margin-top: 8px;
+    letter-spacing: 0.3px;
+}
+
+.branch-type-kitchen {
+    background: #dff6dd;
+    color: #0b6a0b;
+}
+
+.branch-type-sales {
+    background: #deecf9;
+    color: #0078d4;
+}
+
+.branch-type-warehouse {
+    background: #fff4e6;
+    color: #8b5a00;
+}
+
+/* Mobile Responsive */
+@media (max-width: 768px) {
+    .branch-grid {
+        grid-template-columns: 1fr;
+        max-height: 240px;
+    }
+}
+
+/* Animation for selection */
+@keyframes selectBranch {
+    0% { transform: scale(1); }
+    50% { transform: scale(0.98); }
+    100% { transform: scale(1); }
+}
+
+.branch-card.selecting {
+    animation: selectBranch 0.3s ease;
+}
+
+/* Loading state */
+.branch-grid.loading {
+    position: relative;
+    min-height: 120px;
+}
+
+.branch-grid.loading::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 32px;
+    height: 32px;
+    border: 3px solid #e2e8f0;
+    border-top-color: #0078d4;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    to { transform: translate(-50%, -50%) rotate(360deg); }
+}
